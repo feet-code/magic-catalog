@@ -36,25 +36,33 @@ export async function consumeRateLimit(
   maximum: number,
 ) {
   const binding = getRuntimeEnv().DB;
-  if (!binding) return { allowed: false, remaining: 0 };
+  if (!binding) {
+    return { allowed: false, remaining: 0, status: "unavailable" as const };
+  }
 
-  const bucket = new Date().toISOString().slice(0, 10);
-  const identity = await clientIdentityHash(request);
-  const now = new Date().toISOString();
-  const row = await binding
-    .prepare(
-      "INSERT INTO rate_limits (action, bucket, identity_hash, count, updated_at) " +
-        "VALUES (?1, ?2, ?3, 1, ?4) " +
-        "ON CONFLICT(action, bucket, identity_hash) DO UPDATE SET " +
-        "count = count + 1, updated_at = excluded.updated_at RETURNING count",
-    )
-    .bind(action, bucket, identity, now)
-    .first<{ count: number }>();
-  const count = Number(row?.count ?? maximum + 1);
-  return {
-    allowed: count <= maximum,
-    remaining: Math.max(0, maximum - count),
-  };
+  try {
+    const bucket = new Date().toISOString().slice(0, 10);
+    const identity = await clientIdentityHash(request);
+    const now = new Date().toISOString();
+    const row = await binding
+      .prepare(
+        "INSERT INTO rate_limits (action, bucket, identity_hash, count, updated_at) " +
+          "VALUES (?1, ?2, ?3, 1, ?4) " +
+          "ON CONFLICT(action, bucket, identity_hash) DO UPDATE SET " +
+          "count = count + 1, updated_at = excluded.updated_at RETURNING count",
+      )
+      .bind(action, bucket, identity, now)
+      .first<{ count: number }>();
+    const count = Number(row?.count ?? maximum + 1);
+    return {
+      allowed: count <= maximum,
+      remaining: Math.max(0, maximum - count),
+      status: "ready" as const,
+    };
+  } catch (error) {
+    console.error("[magic-catalog] Rate-limit storage is unavailable.", error);
+    return { allowed: false, remaining: 0, status: "unavailable" as const };
+  }
 }
 
 export async function verifyTurnstile(

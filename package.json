@@ -12,7 +12,7 @@
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
     "test": "npm run build && node --test tests/*.test.mjs",
     "typecheck": "tsc --noEmit",
-    "deploy": "npm run build && wrangler deploy --config wrangler.jsonc",
+    "deploy": "npm run build && npm run db:migrate:remote && wrangler deploy --config wrangler.jsonc",
     "db:migrate:local": "wrangler d1 migrations apply magic-catalog --local --config wrangler.jsonc",
     "db:migrate:remote": "wrangler d1 migrations apply magic-catalog --remote --config wrangler.jsonc",
     "vector:reindex": "node scripts/reindex.mjs",

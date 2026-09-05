@@ -24,17 +24,31 @@ export async function POST(request: Request) {
       { status: 503 },
     );
   }
+  if (!runtime.DB) {
+    return Response.json(
+      { error: "The D1 DB binding is required before indexing." },
+      { status: 503 },
+    );
+  }
 
   let dynamicProducts: Product[] = [];
   try {
+    await runtime.DB.prepare("SELECT 1 FROM rate_limits LIMIT 1").first();
     const rows = await getDb()
       .select()
       .from(products)
       .orderBy(desc(products.createdAt))
       .limit(1000);
     dynamicProducts = rows.map(rowToProduct);
-  } catch {
-    dynamicProducts = [];
+  } catch (error) {
+    console.error("[magic-catalog] D1 schema check failed before reindex.", error);
+    return Response.json(
+      {
+        error:
+          "The D1 schema is not initialized. Run npm run db:migrate:remote, then retry the reindex command.",
+      },
+      { status: 503 },
+    );
   }
 
   const all = [...seedProducts, ...dynamicProducts];

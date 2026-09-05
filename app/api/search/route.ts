@@ -67,13 +67,15 @@ export async function POST(request: Request) {
 
     const rate = await consumeRateLimit(request, "generate", 3);
     if (!rate.allowed) {
+      const storageUnavailable = rate.status === "unavailable";
       return Response.json(
         {
           mode: "related",
           generated: false,
-          generationStatus: "limited",
-          message:
-            "No close match was found. The daily generation limit for this browser has been reached, so these are the nearest existing ideas.",
+          generationStatus: storageUnavailable ? "unavailable" : "limited",
+          message: storageUnavailable
+            ? "No close match was found. Catalog search is available, but new concept generation is temporarily unavailable while its storage is being prepared."
+            : "No close match was found. The daily generation limit for this browser has been reached, so these are the nearest existing ideas.",
           results,
         },
         { headers: { "cache-control": "no-store" } },
@@ -118,6 +120,7 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+    console.error("[magic-catalog] Search request failed.", error);
     return Response.json(
       { error: "Search is temporarily unavailable." },
       { status: 500 },

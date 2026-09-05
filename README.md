@@ -75,6 +75,8 @@ npx wrangler vectorize create magic-catalog-products --dimensions=384 --metric=c
 npm run db:migrate:remote
 ~~~
 
+The migration is required for generated products, rate limiting, and email signups. Reindexing Vectorize does not create the D1 tables. Future `npm run deploy` commands apply pending migrations automatically before uploading the Worker.
+
 4. Add long random values for the two required operational secrets.
 
 ~~~
@@ -111,7 +113,7 @@ npm run deploy
 npm run vector:reindex
 ~~~
 
-The endpoint indexes the 100 bundled concepts in batches and also refreshes up to the 1,000 newest generated concepts. Newly generated concepts index themselves automatically.
+The endpoint first verifies that the D1 schema is ready, then indexes the 100 bundled concepts in batches and refreshes up to the 1,000 newest generated concepts. Newly generated concepts index themselves automatically.
 
 ## Google Search Console
 

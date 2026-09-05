@@ -65,3 +65,58 @@ test("publishes robots and the sitemap index", async () => {
   assert.match(await robots.text(), /Sitemap: .*\/sitemap\.xml/);
   assert.match(await sitemap.text(), /<sitemapindex/);
 });
+
+test("keeps search available when the D1 rate-limit table is missing", async () => {
+  const worker = await loadWorker();
+  const response = await worker.fetch(
+    new Request("http://localhost/api/search", {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        query: "organize unusual jellyfish tank maintenance reminders",
+      }),
+    }),
+    {
+      ...workerEnv,
+      DB: {
+        prepare() {
+          throw new Error("no such table: rate_limits");
+        },
+      },
+    },
+    context,
+  );
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(body.mode, "related");
+  assert.equal(body.generationStatus, "unavailable");
+  assert.ok(Array.isArray(body.results));
+});
+
+test("reindex reports an uninitialized D1 schema instead of false success", async () => {
+  const worker = await loadWorker();
+  const response = await worker.fetch(
+    new Request("http://localhost/api/admin/reindex", {
+      method: "POST",
+      headers: { authorization: "Bearer test-admin-token" },
+    }),
+    {
+      ...workerEnv,
+      ADMIN_REINDEX_TOKEN: "test-admin-token",
+      AI: {},
+      PRODUCT_INDEX: {},
+      DB: {
+        prepare() {
+          throw new Error("no such table: rate_limits");
+        },
+      },
+    },
+    context,
+  );
+  const body = await response.json();
+  assert.equal(response.status, 503);
+  assert.match(body.error, /D1 schema is not initialized/);
+});
