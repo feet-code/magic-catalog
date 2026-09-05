@@ -57,7 +57,39 @@ export function getRuntimeEnv(): MagicCatalogEnv {
   return process.env as unknown as MagicCatalogEnv;
 }
 
+const DEFAULT_SITE_URL = "https://magic-catalog.cloudwebsites.workers.dev";
+
+function hasValidHostname(hostname: string) {
+  if (hostname === "localhost" || hostname.startsWith("[")) return true;
+  if (/^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname)) {
+    return hostname.split(".").every((part) => Number(part) <= 255);
+  }
+
+  if (hostname.length > 253) return false;
+  return hostname.split(".").every(
+    (label) =>
+      label.length > 0 &&
+      label.length <= 63 &&
+      /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(label),
+  );
+}
+
 export function getSiteUrl() {
   const configured = getRuntimeEnv().SITE_URL?.trim();
-  return (configured || "https://magic-catalog.example").replace(/\/+$/, "");
+  if (!configured) return DEFAULT_SITE_URL;
+
+  try {
+    const parsed = new URL(configured);
+    if (
+      (parsed.protocol !== "https:" && parsed.protocol !== "http:") ||
+      parsed.username ||
+      parsed.password ||
+      !hasValidHostname(parsed.hostname)
+    ) {
+      return DEFAULT_SITE_URL;
+    }
+    return parsed.origin;
+  } catch {
+    return DEFAULT_SITE_URL;
+  }
 }

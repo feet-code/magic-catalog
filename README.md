@@ -69,7 +69,7 @@ Copy the returned database ID into wrangler.jsonc in place of REPLACE_WITH_D1_DA
 npx wrangler vectorize create magic-catalog-products --dimensions=384 --metric=cosine
 ~~~
 
-3. Set SITE_URL in wrangler.jsonc to the final workers.dev or custom-domain origin, then apply the schema.
+3. `SITE_URL` already points to `https://magic-catalog.cloudwebsites.workers.dev`. Change it only if you attach a custom domain, then apply the schema.
 
 ~~~
 npm run db:migrate:remote

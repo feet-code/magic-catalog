@@ -40,3 +40,23 @@ test("D1 migration contains the query-path indexes and optimization step", async
   assert.match(migration, /idx_signups_product_email/);
   assert.match(migration, /PRAGMA optimize/);
 });
+
+test("rejects invalid SITE_URL values without crashing metadata rendering", async () => {
+  const { getSiteUrl, setRuntimeEnv } = await vite.ssrLoadModule(
+    "/lib/runtime.ts",
+  );
+
+  setRuntimeEnv({ SITE_URL: "https://REPLACE_WITH_YOUR_DOMAIN" });
+  assert.equal(
+    getSiteUrl(),
+    "https://magic-catalog.cloudwebsites.workers.dev",
+  );
+
+  setRuntimeEnv({ SITE_URL: "https://magic-catalog.cloudwebsites.workers.dev/" });
+  assert.equal(
+    getSiteUrl(),
+    "https://magic-catalog.cloudwebsites.workers.dev",
+  );
+
+  setRuntimeEnv({});
+});

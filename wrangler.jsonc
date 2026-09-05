@@ -26,7 +26,7 @@
     }
   ],
   "vars": {
-    "SITE_URL": "https://REPLACE_WITH_YOUR_DOMAIN"
+    "SITE_URL": "https://magic-catalog.cloudwebsites.workers.dev"
   },
   "observability": {
     "enabled": true
