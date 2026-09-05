@@ -1,0 +1,34 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "magic-catalog",
+  "main": "dist/server/index.js",
+  "compatibility_date": "2026-09-05",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist/client",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "magic-catalog",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "drizzle"
+    }
+  ],
+  "ai": {
+    "binding": "AI"
+  },
+  "vectorize": [
+    {
+      "binding": "PRODUCT_INDEX",
+      "index_name": "magic-catalog-products"
+    }
+  ],
+  "vars": {
+    "SITE_URL": "https://REPLACE_WITH_YOUR_DOMAIN"
+  },
+  "observability": {
+    "enabled": true
+  }
+}
