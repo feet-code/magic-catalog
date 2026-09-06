@@ -102,8 +102,8 @@ export async function POST(request: Request) {
           generationStatus: storageUnavailable ? "unavailable" : "limited",
           debugId: storageUnavailable ? requestId : undefined,
           message: storageUnavailable
-            ? "No close match was found. Catalog search is available, but new concept generation is temporarily unavailable while its storage is being prepared."
-            : "No close match was found. The daily generation limit for this browser has been reached, so these are the nearest existing ideas.",
+            ? "The closest available results are shown. Please try again shortly."
+            : "These are the closest available results. Try another search tomorrow for a more tailored match.",
           results,
         },
         requestId,
@@ -140,8 +140,8 @@ export async function POST(request: Request) {
       });
       const message =
         failure.code === "PRODUCT_GENERATION_NOT_CONFIGURED"
-          ? "No close match was found. On-demand generation needs its AI binding configured; the nearest existing ideas are shown below."
-          : "No close match was found, and a new concept could not be generated just now. The nearest existing ideas are shown below.";
+          ? "The closest available results are shown below."
+          : "The closest available results are shown below. Please try again later for a more tailored match.";
       return jsonResponse(
         {
           mode: "related",

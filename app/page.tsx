@@ -24,7 +24,7 @@ export default function Home() {
             </Link>
             <div className="flex items-center gap-2 rounded-full border border-border bg-white/80 px-3 py-1.5 text-xs font-semibold text-muted-foreground backdrop-blur">
               <span className="size-2 rounded-full bg-accent-foreground" />
-              100 concepts live
+              100 products
             </div>
           </header>
 
@@ -35,12 +35,11 @@ export default function Home() {
                 Search beyond the catalog
               </div>
               <h1 className="max-w-5xl text-5xl font-black leading-[0.96] tracking-[-0.06em] text-foreground md:text-7xl lg:text-[5.7rem]">
-                Describe the tool you wish existed.
+                Describe what you need. Find the right product.
               </h1>
               <p className="mt-7 max-w-2xl text-lg leading-8 text-muted-foreground md:text-xl">
-                Search by the problem, workflow, or outcome. When no product is
-                close enough, a focused new concept can be created for your
-                search.
+                Search focused software by the problem, workflow, or outcome
+                you need.
               </p>
               <div className="mt-10 max-w-4xl">
                 <HomeSearch />
@@ -63,7 +62,7 @@ export default function Home() {
           <div className="flex items-center justify-between border-t border-border/80 py-5 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             <span>One domain</span>
             <span className="hidden sm:inline">Problem-first discovery</span>
-            <span>Shaped by real demand</span>
+            <span>Focused software</span>
           </div>
         </div>
       </section>
@@ -72,10 +71,10 @@ export default function Home() {
         <div className="mb-10 flex items-end justify-between gap-6">
           <div>
             <p className="text-sm font-bold uppercase tracking-[0.16em] text-primary">
-              Initial catalog
+              Featured products
             </p>
             <h2 className="mt-3 text-4xl font-black tracking-[-0.045em] md:text-5xl">
-              Narrow ideas for expensive problems.
+              Focused products for expensive problems.
             </h2>
           </div>
           <Asterisk className="hidden size-10 text-accent-foreground md:block" />
@@ -105,7 +104,7 @@ export default function Home() {
                 </p>
               </div>
               <div className="mt-8 flex items-center justify-between text-sm font-semibold">
-                <span>Explore concept</span>
+                <span>Explore product</span>
                 <ArrowUpRight className="size-4 transition group-hover:text-primary" />
               </div>
             </Link>
@@ -114,7 +113,7 @@ export default function Home() {
 
         <details className="mt-16 rounded-2xl border border-border bg-card">
           <summary className="cursor-pointer list-none px-6 py-5 font-bold marker:hidden">
-            Browse all 100 product concepts
+            Browse all 100 products
           </summary>
           <div className="grid gap-x-8 gap-y-3 border-t border-border px-6 py-6 sm:grid-cols-2 lg:grid-cols-3">
             {seedProducts.map((product) => (
@@ -134,8 +133,7 @@ export default function Home() {
         <div className="mx-auto flex max-w-7xl flex-col gap-5 px-5 py-10 text-sm md:flex-row md:items-center md:justify-between md:px-8">
           <p className="font-black tracking-[-0.04em]">MAGIC/CATALOG</p>
           <p className="max-w-xl leading-6 text-background/60">
-            Every page is a transparent product concept. Interest signals help
-            decide what deserves to be built.
+            Find focused software by the problem it solves.
           </p>
         </div>
       </footer>

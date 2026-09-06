@@ -74,7 +74,7 @@ export function EmailSignup({
       >
         <div className="flex items-center gap-2 font-bold">
           <Check className="size-5" />
-          You are on the list.
+          You are subscribed.
         </div>
         <p className="mt-2 text-sm leading-6 opacity-80">
           We will only email you about {productName} and closely related updates.
@@ -125,7 +125,7 @@ export function EmailSignup({
             Saving
           </>
         ) : (
-          "Join the early-access list"
+          "Get product updates"
         )}
       </Button>
       {error ? (

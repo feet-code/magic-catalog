@@ -3,7 +3,6 @@ export type DiagnosticStage =
   | "gemini_api"
   | "workers_ai"
   | "response_validation"
-  | "fallback_llm"
   | "database"
   | "vectorize"
   | "unknown";

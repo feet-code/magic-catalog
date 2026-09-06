@@ -4,7 +4,6 @@ import {
   ArrowUpRight,
   CheckCircle2,
   Search,
-  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -70,30 +69,32 @@ export default async function ProductPage({
       question: "What is " + product.name + "?",
       answer:
         product.name +
-        " is a focused product concept for " +
+        " is focused software for " +
         product.audience +
         ". " +
         product.promise,
     },
     {
-      question: "What problem would it solve?",
+      question: "What problem does it solve?",
       answer: product.problem + " " + product.differentiator,
     },
     {
-      question: "How would the workflow work?",
+      question: "How does the workflow work?",
       answer: product.workflow
         .map((step, index) => String(index + 1) + ". " + step)
         .join(" "),
     },
     {
-      question: "Is " + product.name + " available today?",
+      question: "Who is " + product.name + " for?",
       answer:
-        "Not yet. This is a transparent concept page used to measure whether the problem is important enough to build. Joining the list records interest; it does not create a paid account.",
+        product.name +
+        " is designed for " +
+        product.audience +
+        ". Subscribe for feature updates and related resources.",
     },
     {
-      question: "What should remain a human decision?",
-      answer:
-        "The product should organize evidence, exceptions, and next actions. Legal, medical, financial, safety, employment, compliance, and other consequential decisions must stay with qualified people.",
+      question: "What outcomes can teams track?",
+      answer: product.metrics.join(", ") + ".",
     },
   ];
   const structuredData = {
@@ -172,16 +173,6 @@ export default async function ProductPage({
                 <span className="rounded-full border border-primary/20 bg-white px-3 py-1.5 text-xs font-bold uppercase tracking-[0.14em] text-primary">
                   {product.category}
                 </span>
-                {product.source === "generated" ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-xs font-bold text-accent-foreground">
-                    <Sparkles className="size-3.5" />
-                    Created from a catalog search
-                  </span>
-                ) : (
-                  <span className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    Initial concept
-                  </span>
-                )}
               </div>
               <h1 className="mt-7 max-w-4xl text-5xl font-black leading-[0.98] tracking-[-0.055em] text-foreground md:text-7xl">
                 {product.name}
@@ -196,14 +187,14 @@ export default async function ProductPage({
 
             <aside className="rounded-2xl border border-border bg-white p-6 shadow-xl shadow-primary/5 md:p-7">
               <p className="text-xs font-bold uppercase tracking-[0.14em] text-primary">
-                Early access
+                Product updates
               </p>
               <h2 className="mt-3 text-2xl font-black tracking-[-0.035em]">
-                Want this workflow?
+                Stay informed about {product.name}
               </h2>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                Join the product-specific list for launch updates and a chance
-                to shape the first useful version.
+                Get feature updates, product news, and related resources by
+                email.
               </p>
               <div className="mt-6">
                 <EmailSignup
@@ -237,8 +228,7 @@ export default async function ProductPage({
                   reconstructed later.
                 </p>
                 <p>
-                  A useful tool should reduce that coordination burden without
-                  pretending every decision can be automated. It should make
+                  {product.name} reduces that coordination burden by making
                   evidence easier to collect, the next action easier to see,
                   and the final outcome easier to learn from.
                 </p>
@@ -247,7 +237,7 @@ export default async function ProductPage({
 
             <section className="mt-16">
               <p className="text-sm font-bold uppercase tracking-[0.16em] text-primary">
-                Proposed workflow
+                How it works
               </p>
               <h2 className="mt-4 text-3xl font-black tracking-[-0.04em] md:text-4xl">
                 From scattered context to a clear decision
@@ -274,7 +264,7 @@ export default async function ProductPage({
                 The sharper angle
               </p>
               <h2 className="mt-4 text-3xl font-black tracking-[-0.04em]">
-                What makes the concept different
+                What makes it different
               </h2>
               <p className="mt-6 text-lg leading-8 text-background/70">
                 {product.differentiator}
@@ -375,7 +365,7 @@ export default async function ProductPage({
         <section className="border-t border-border bg-white">
           <div className="mx-auto max-w-7xl px-5 py-16 md:px-8 md:py-20">
             <h2 className="text-3xl font-black tracking-[-0.04em]">
-              Related product concepts
+              Related products
             </h2>
             <div className="mt-8 grid gap-4 md:grid-cols-3">
               {related.map((item) => (
@@ -401,8 +391,7 @@ export default async function ProductPage({
       ) : null}
 
       <footer className="border-t border-border px-5 py-8 text-center text-xs text-muted-foreground md:px-8">
-        Product concept, not a launched service. Last updated{" "}
-        {new Date(product.createdAt).toISOString().slice(0, 10)}.
+        Last updated {new Date(product.createdAt).toISOString().slice(0, 10)}.
       </footer>
     </main>
   );

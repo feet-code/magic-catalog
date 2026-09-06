@@ -8,11 +8,11 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     metadataBase: new URL(getSiteUrl()),
     title: {
-      default: "Magic Catalog — Describe it. Find it. Create it.",
+      default: "Magic Catalog — Describe it. Find it.",
       template: "%s | Magic Catalog",
     },
     description:
-      "Search focused software product concepts by the problem you need solved. If there is no close match, Magic Catalog can create a new concept.",
+      "Search focused software products by the problem, workflow, or outcome you need.",
     verification: runtime.GSC_VERIFICATION_TOKEN
       ? { google: runtime.GSC_VERIFICATION_TOKEN }
       : undefined,

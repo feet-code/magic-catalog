@@ -1,8 +1,8 @@
 # Magic Catalog
 
-Magic Catalog is a one-domain SEO experiment built to support a very large catalog of narrow product concepts.
+Magic Catalog is a one-domain catalog built to support a very large collection of focused software products.
 
-Visitors describe a problem or desired solution. The site returns the closest products using semantic and lexical retrieval. When no result is close enough, an LLM creates a transparent new product concept, saves it, indexes it, and returns it as the first result. Every product page has useful explanatory content, FAQs, structured data, related internal links, and a product-specific early-access form.
+Visitors describe a problem or desired solution. The site returns the closest products using semantic and lexical retrieval. When no result is close enough, Gemini creates a tailored product record, saves it, indexes it, and returns it as the first result. Every product page has explanatory content, FAQs, structured data, related internal links, and a product-specific email signup.
 
 The repository starts with exactly 100 hand-curated niche product pages.
 
@@ -10,7 +10,7 @@ The repository starts with exactly 100 hand-curated niche product pages.
 
 - Problem-first search homepage and shareable no-index results pages
 - 100 server-rendered, indexable product pages
-- Gemini API generation with Workers AI and OpenAI-compatible fallbacks
+- Gemini API generation with an ordered six-model fallback chain
 - Workers AI embeddings plus Vectorize semantic search
 - Indexed lexical fallback for generated products
 - D1 persistence for generated products, search terms, email signups, and abuse limits
@@ -22,11 +22,9 @@ The repository starts with exactly 100 hand-curated niche product pages.
 - Product and FAQ structured data
 - A protected endpoint for indexing the initial catalog in Vectorize
 
-Search and product copy stay honest: dynamically created pages are marked as concepts and do not pretend a product has launched.
-
 ## Architecture
 
-The application is rendered by one Cloudflare Worker. The initial 100 products are bundled with the Worker, so they load even if D1 is unavailable. New LLM-created products and email signups are stored in D1. Gemini is the primary product generator; Workers AI remains the automatic fallback and supplies 384-dimensional embeddings for Vectorize. A compact indexed term table provides a no-AI fallback for generated products.
+The application is rendered by one Cloudflare Worker. The initial 100 products are bundled with the Worker, so they load even if D1 is unavailable. New Gemini-created products and email signups are stored in D1. Gemini is the only product generator. Workers AI supplies 384-dimensional embeddings for Vectorize but is not used to write product content. A compact indexed term table provides a no-AI fallback for generated products.
 
 Product pages are rendered by slug at request time, so adding hundreds of thousands of records does not create a million-file build. The sitemap routes split URLs into crawler-safe batches.
 
@@ -61,7 +59,7 @@ This setup uses Workers, D1, Workers AI, and Vectorize.
 1. Authenticate and create the database.
 
 ~~~
-npx wrangler login
+npm run login:cloudflare
 npx wrangler d1 create magic-catalog
 ~~~
 
@@ -89,12 +87,11 @@ npx wrangler secret put RATE_LIMIT_SALT
 npx wrangler secret put ADMIN_REINDEX_TOKEN
 ~~~
 
-`GEMINI_MODELS` defaults to `gemini-3.5-flash,gemini-2.5-flash,gemini-2.5-flash-lite`. They are tried in that order, so a free-tier rate limit or temporary model failure can fall through to the next model. Override the comma-separated value in `wrangler.jsonc` only if needed.
+`GEMINI_MODELS` defaults to `gemini-3.8-flash,gemini-3.7-flash,gemini-3.6-flash,gemini-3.5-flash,gemini-3-flash,gemini-2.5-flash`. They are tried in that order, so an unavailable model, rate limit, or temporary failure falls through to the next Gemini model. Override the comma-separated value in `wrangler.jsonc` only if needed.
 
-5. Reuse the same variables as `seo-test`. Copy `.env.example` to the ignored `.env` file, then paste the values you already use there. `npm run deploy` loads `.env` automatically, and values already exported in the shell take precedence.
+5. Reuse the same monitoring variables as `seo-test`. Copy `.env.example` to the ignored `.env` file, then paste the values you already use there. Local Cloudflare authentication uses the Wrangler OAuth login above; an API token is only needed for CI or headless automation. `npm run deploy` loads `.env` automatically, and values already exported in the shell take precedence.
 
 ~~~text
-CLOUDFLARE_API_TOKEN=...
 CLOUDFLARE_ACCOUNT_ID=...
 CLOUDFLARE_WORKERS_SUBDOMAIN=... # harmless here; retained for copy/paste parity
 POSTHOG_PROJECT_ID=...
@@ -127,11 +124,11 @@ The deployment command uploads the shared PostHog values when present, uses the 
 npm run vector:reindex
 ~~~
 
-The endpoint first verifies that the D1 schema is ready, then indexes the 100 bundled concepts in batches and refreshes up to the 1,000 newest generated concepts. Newly generated concepts index themselves automatically.
+The endpoint first verifies that the D1 schema is ready, then indexes the 100 bundled products in batches and refreshes up to the 1,000 newest generated products. Newly generated products index themselves automatically.
 
 ## Diagnose production
 
-The protected diagnostic checks D1, the Gemini configuration and generation path, Workers AI embeddings, and Vectorize independently. It generates a sample draft without saving a product.
+The protected diagnostic checks D1, the Gemini model chain, Workers AI embeddings, and Vectorize independently. It generates a sample draft without saving a product.
 
 1. If it does not exist yet, copy `.dev.vars.example` to `.dev.vars`.
 2. Set `ADMIN_REINDEX_TOKEN` in `.dev.vars` to the same value uploaded with `wrangler secret put`.
@@ -155,7 +152,7 @@ npm run logs
 
 Find the matching Debug ID in the `product_generation_failed` event. Successful generations emit `product_generation_succeeded`; semantic-search and Vectorize failures are logged separately. Cloudflare's dashboard can also search retained Worker logs when observability is enabled.
 
-Product generation asks Gemini for schema-constrained JSON and validates the result before saving it. Each failed provider/model attempt is logged. The chain is Gemini models, Workers AI JSON-schema mode, then the optional OpenAI-compatible provider.
+Product generation asks Gemini for schema-constrained JSON and validates the result before saving it. Each failed Gemini model attempt is logged before the next model is tried. Workers AI is used only for embeddings.
 
 ## Google Search Console
 
@@ -167,7 +164,7 @@ The generated verification token is emitted as the standard `google-site-verific
 
 ## PostHog
 
-Use the same `POSTHOG_PROJECT_API_KEY` and `POSTHOG_INGEST_HOST` as `seo-test` if all experiments should appear in one PostHog project. The application forwards a small allowlisted event payload server-side and never includes the signup email in PostHog.
+Use the same `POSTHOG_PROJECT_API_KEY` and `POSTHOG_INGEST_HOST` as `seo-test` if all websites should appear in one PostHog project. The application forwards a small allowlisted event payload server-side and never includes the signup email in PostHog.
 
 Events:
 
@@ -182,7 +179,7 @@ Useful properties include product_slug, category, result_mode, result_count, and
 
 ## Inspect email interest
 
-Email addresses are stored in D1 because they are needed for launch outreach. PostHog receives only an anonymous browser ID.
+Email addresses are stored in D1 because they are needed for product updates. PostHog receives only an anonymous browser ID.
 
 ~~~
 npx wrangler d1 execute magic-catalog --remote --command "SELECT product_slug, count(*) AS signups FROM signups GROUP BY product_slug ORDER BY signups DESC"
@@ -192,11 +189,11 @@ Treat the database as personal data: limit access, publish a privacy policy befo
 
 ## Free-tier reality
 
-The initial experiment is designed to run inside Cloudflare's and Gemini's free allowances at modest traffic. Gemini free-tier quotas are project- and model-specific. Current Cloudflare documentation lists 100,000 Worker requests per day, 5 million D1 rows read per day, 100,000 D1 rows written per day, 500 MB per free D1 database, 10,000 free Workers AI neurons per day, and 5 million free stored Vectorize dimensions.
+The initial catalog is designed to run inside Cloudflare's and Gemini's free allowances at modest traffic. Gemini free-tier quotas are project- and model-specific. Current Cloudflare documentation lists 100,000 Worker requests per day, 5 million D1 rows read per day, 100,000 D1 rows written per day, 500 MB per free D1 database, 10,000 free Workers AI neurons per day, and 5 million free stored Vectorize dimensions.
 
 At 384 dimensions, the free Vectorize storage allowance covers roughly 13,000 product vectors, not one million. One million fully generated product records plus their search index will also outgrow a single free D1 database. In other words:
 
-- The 100-page test can run free.
+- The initial 100-page catalog can run free.
 - A low-traffic catalog can grow into the thousands for free.
 - A true one-million-page semantic catalog will require paid Vectorize or another retrieval tier and likely D1 sharding or compact object storage.
 
@@ -215,10 +212,9 @@ Official limits and pricing:
 ## Important safeguards
 
 - Search pages are no-index to avoid infinite crawl traps.
-- LLM generation is limited to three new concepts per browser identity per UTC day.
+- Product generation is limited to three new records per browser identity per UTC day.
 - The browser identity is a salted hash; the raw IP is not stored.
 - Generated schemas are validated before persistence.
-- High-consequence subjects are constrained to administrative support with human decisions.
 - The signup form includes a honeypot, deduplication, optional Turnstile, and a daily attempt limit.
 - The Vectorize reindex route is hidden behind ADMIN_REINDEX_TOKEN.
 
@@ -228,7 +224,7 @@ Official limits and pricing:
 - app/product/[slug]/page.tsx — SEO product-page renderer
 - app/api/search/route.ts — retrieval and generation flow
 - app/api/signup/route.ts — email capture
-- lib/seed-products.ts — the initial 100 product concepts
+- lib/seed-products.ts — the initial 100 products
 - lib/ai.ts — generation, embeddings, and semantic retrieval
 - db/schema.ts — D1 schema
 - drizzle/ — generated D1 migrations

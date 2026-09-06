@@ -12,7 +12,6 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { captureEvent } from "../lib/analytics-client";
 import type { ProductSearchResult } from "../lib/product-types";
 import { TurnstileWidget } from "./turnstile-widget";
-import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Skeleton } from "./ui/skeleton";
@@ -172,7 +171,7 @@ export function SearchResults({
             <div className="space-y-4">
               <div className="mb-7 flex items-center gap-3 text-sm font-medium text-muted-foreground">
                 <Sparkles className="size-4 text-primary" />
-                Searching by meaning. A new concept may be created if nothing fits.
+                Searching by meaning across the catalog.
               </div>
               {[0, 1, 2].map((item) => (
                 <Skeleton key={item} className="h-48 rounded-2xl" />
@@ -191,12 +190,6 @@ export function SearchResults({
                 <p className="text-sm text-muted-foreground">
                   {results.length} {results.length === 1 ? "result" : "results"}
                 </p>
-                {results[0]?.generated ? (
-                  <Badge className="gap-1.5 rounded-full bg-accent px-3 py-1 text-accent-foreground">
-                    <Sparkles className="size-3.5" />
-                    New concept created for this search
-                  </Badge>
-                ) : null}
               </div>
               {message ? (
                 <div className="mb-6 rounded-xl border border-border bg-muted/60 p-4 text-sm leading-6 text-muted-foreground">
@@ -226,11 +219,6 @@ export function SearchResults({
                           <span className="text-xs font-bold uppercase tracking-[0.14em] text-primary">
                             {index === 0 ? "Best match" : result.category}
                           </span>
-                          {result.generated ? (
-                            <span className="rounded-full bg-accent px-2.5 py-1 text-xs font-semibold text-accent-foreground">
-                              Created now
-                            </span>
-                          ) : null}
                         </div>
                         <h2 className="text-2xl font-black tracking-[-0.03em] text-foreground md:text-3xl">
                           {result.name}

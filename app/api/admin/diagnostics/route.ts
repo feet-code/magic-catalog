@@ -126,19 +126,6 @@ export async function POST(request: Request) {
       "A diagnostic-only tool for organizing rooftop moss garden maintenance",
       requestId,
     );
-    if (runtime.GEMINI_API_KEY && generation.provider !== "gemini") {
-      throw new RuntimeDiagnosticError(
-        "GEMINI_FALLBACK_USED",
-        "gemini_api",
-        "Gemini failed and another provider generated the diagnostic draft.",
-        undefined,
-        {
-          provider: generation.provider,
-          model: generation.model,
-          attempts: generation.attempts,
-        },
-      );
-    }
     return {
       provider: generation.provider,
       model: generation.model,
@@ -167,9 +154,6 @@ export async function POST(request: Request) {
         gemini: Boolean(runtime.GEMINI_API_KEY?.trim()),
         workersAi: Boolean(runtime.AI),
         vectorize: Boolean(runtime.PRODUCT_INDEX),
-        fallbackLlm: Boolean(
-          runtime.LLM_API_BASE && runtime.LLM_API_KEY && runtime.LLM_MODEL,
-        ),
       },
       checks,
     },

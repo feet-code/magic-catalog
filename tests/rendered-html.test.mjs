@@ -28,12 +28,13 @@ test("renders the search-first catalog homepage", async () => {
   const html = await response.text();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
-  assert.match(html, /Describe the tool you wish existed/);
-  assert.match(html, /Browse all 100 product concepts/);
+  assert.match(html, /Describe what you need\. Find the right product/);
+  assert.match(html, /Browse all 100 products/);
+  assert.doesNotMatch(html, /transparent product concept|deserves to be built/i);
   assert.match(html, /overdue-invoice-rescue/);
 });
 
-test("renders an indexable product concept with signup and FAQ content", async () => {
+test("renders an indexable product page with signup and FAQ content", async () => {
   const worker = await loadWorker();
   const response = await worker.fetch(
     new Request("http://localhost/product/overdue-invoice-rescue", {
@@ -45,9 +46,13 @@ test("renders an indexable product concept with signup and FAQ content", async (
   const html = await response.text();
   assert.equal(response.status, 200);
   assert.match(html, /Invoice Rescue/);
-  assert.match(html, /Join the early-access list/);
+  assert.match(html, /Get product updates/);
   assert.match(html, /Questions about/);
   assert.match(html, /application\/ld\+json/);
+  assert.doesNotMatch(
+    html,
+    /transparent concept|not a launched service|created from a catalog search|initial concept/i,
+  );
 });
 
 test("publishes robots and the sitemap index", async () => {
