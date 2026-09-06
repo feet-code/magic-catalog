@@ -12,7 +12,7 @@
     {
       "binding": "DB",
       "database_name": "magic-catalog",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "828e87d1-e0d0-4eaf-a9e5-ffc6d0bdc8ae",
       "migrations_dir": "drizzle"
     }
   ],
