@@ -93,6 +93,7 @@ test("keeps search available when the D1 rate-limit table is missing", async () 
   assert.equal(response.status, 200);
   assert.equal(body.mode, "related");
   assert.equal(body.generationStatus, "unavailable");
+  assert.ok(body.debugId);
   assert.ok(Array.isArray(body.results));
 });
 
@@ -119,4 +120,32 @@ test("reindex reports an uninitialized D1 schema instead of false success", asyn
   const body = await response.json();
   assert.equal(response.status, 503);
   assert.match(body.error, /D1 schema is not initialized/);
+});
+
+test("admin diagnostics identifies missing production bindings", async () => {
+  const worker = await loadWorker();
+  const response = await worker.fetch(
+    new Request("http://localhost/api/admin/diagnostics", {
+      method: "POST",
+      headers: { authorization: "Bearer test-admin-token" },
+    }),
+    {
+      ...workerEnv,
+      ADMIN_REINDEX_TOKEN: "test-admin-token",
+    },
+    context,
+  );
+  const body = await response.json();
+  assert.equal(response.status, 503);
+  assert.equal(body.ok, false);
+  assert.ok(body.requestId);
+  assert.equal(body.checks.d1.failure.code, "D1_BINDING_MISSING");
+  assert.equal(
+    body.checks.geminiConfiguration.failure.code,
+    "GEMINI_API_KEY_MISSING",
+  );
+  assert.equal(
+    body.checks.productGeneration.failure.code,
+    "PRODUCT_GENERATION_NOT_CONFIGURED",
+  );
 });

@@ -5,6 +5,11 @@ import {
   searchSeedCatalog,
   toSearchResult,
 } from "../../../lib/catalog";
+import {
+  diagnosticDetails,
+  logRuntimeEvent,
+  requestIdFor,
+} from "../../../lib/diagnostics";
 import { generateAndSaveProduct } from "../../../lib/generation";
 import type { ProductSearchResult } from "../../../lib/product-types";
 import { consumeRateLimit, verifyTurnstile } from "../../../lib/security";
@@ -27,7 +32,19 @@ function mergeResults(groups: ProductSearchResult[][]) {
     .slice(0, 8);
 }
 
+function jsonResponse(body: unknown, requestId: string, status = 200) {
+  return Response.json(body, {
+    status,
+    headers: {
+      "cache-control": "no-store",
+      "x-request-id": requestId,
+    },
+  });
+}
+
 export async function POST(request: Request) {
+  const requestId = requestIdFor(request);
+  const startedAt = Date.now();
   try {
     const payload = bodySchema.parse(await request.json());
     const passedChallenge = await verifyTurnstile(
@@ -35,16 +52,21 @@ export async function POST(request: Request) {
       payload.turnstileToken,
     );
     if (!passedChallenge) {
-      return Response.json(
+      return jsonResponse(
         { error: "Please complete the verification and try again." },
-        { status: 400 },
+        requestId,
+        400,
       );
     }
 
     let semantic: ProductSearchResult[] | null = null;
     try {
       semantic = await semanticSearch(payload.query, 8);
-    } catch {
+    } catch (error) {
+      logRuntimeEvent("warn", "semantic_search_failed", {
+        requestId,
+        failure: diagnosticDetails(error),
+      });
       semantic = null;
     }
     const [dynamicResults] = await Promise.all([
@@ -59,71 +81,96 @@ export async function POST(request: Request) {
     const threshold = semantic ? 0.72 : 0.42;
 
     if (bestScore >= threshold) {
-      return Response.json(
+      return jsonResponse(
         { mode: "matches", generated: false, results },
-        { headers: { "cache-control": "no-store" } },
+        requestId,
       );
     }
 
     const rate = await consumeRateLimit(request, "generate", 3);
     if (!rate.allowed) {
       const storageUnavailable = rate.status === "unavailable";
-      return Response.json(
+      if (storageUnavailable) {
+        logRuntimeEvent("error", "generation_rate_limit_storage_unavailable", {
+          requestId,
+        });
+      }
+      return jsonResponse(
         {
           mode: "related",
           generated: false,
           generationStatus: storageUnavailable ? "unavailable" : "limited",
+          debugId: storageUnavailable ? requestId : undefined,
           message: storageUnavailable
             ? "No close match was found. Catalog search is available, but new concept generation is temporarily unavailable while its storage is being prepared."
             : "No close match was found. The daily generation limit for this browser has been reached, so these are the nearest existing ideas.",
           results,
         },
-        { headers: { "cache-control": "no-store" } },
+        requestId,
       );
     }
 
     try {
-      const generated = await generateAndSaveProduct(payload.query);
+      const generated = await generateAndSaveProduct(payload.query, requestId);
       const top = {
         ...toSearchResult(generated.product, 1),
         generated: generated.created,
       };
-      return Response.json(
+      logRuntimeEvent("info", "product_generation_succeeded", {
+        requestId,
+        durationMs: Date.now() - startedAt,
+        productSlug: generated.product.slug,
+        created: generated.created,
+        generation: "generation" in generated ? generated.generation : undefined,
+      });
+      return jsonResponse(
         {
           mode: generated.created ? "generated" : "matches",
           generated: generated.created,
           results: mergeResults([[top], results]),
         },
-        { headers: { "cache-control": "no-store" } },
+        requestId,
       );
     } catch (error) {
+      const failure = diagnosticDetails(error);
+      logRuntimeEvent("error", "product_generation_failed", {
+        requestId,
+        durationMs: Date.now() - startedAt,
+        failure,
+      });
       const message =
-        error instanceof Error &&
-        error.message.startsWith("Product generation is not configured")
+        failure.code === "PRODUCT_GENERATION_NOT_CONFIGURED"
           ? "No close match was found. On-demand generation needs its AI binding configured; the nearest existing ideas are shown below."
           : "No close match was found, and a new concept could not be generated just now. The nearest existing ideas are shown below.";
-      return Response.json(
+      return jsonResponse(
         {
           mode: "related",
           generated: false,
           generationStatus: "unavailable",
+          debugId: requestId,
           message,
           results,
         },
-        { headers: { "cache-control": "no-store" } },
+        requestId,
       );
     }
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return Response.json(
+      return jsonResponse(
         { error: "Describe a specific problem in 4 to 320 characters." },
-        { status: 400 },
+        requestId,
+        400,
       );
     }
-    console.error("[magic-catalog] Search request failed.", error);
-    return Response.json(
-      { error: "Search is temporarily unavailable." },
-      { status: 500 },
+    logRuntimeEvent("error", "search_request_failed", {
+      requestId,
+      durationMs: Date.now() - startedAt,
+      failure: diagnosticDetails(error),
+    });
+    return jsonResponse(
+      { error: "Search is temporarily unavailable.", debugId: requestId },
+      requestId,
+      500,
     );
   }
 }

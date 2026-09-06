@@ -1,20 +1,19 @@
-const siteUrl = process.env.SITE_URL?.replace(/\/+$/, "");
-const token = process.env.ADMIN_REINDEX_TOKEN;
+import { getAdminConfig } from "./admin-config.mjs";
 
-if (!siteUrl || !token) {
-  console.error(
-    "Set SITE_URL and ADMIN_REINDEX_TOKEN before running the reindex command.",
-  );
-  process.exit(1);
+try {
+  const { siteUrl, token } = await getAdminConfig("Reindex");
+  const response = await fetch(siteUrl + "/api/admin/reindex", {
+    method: "POST",
+    headers: { authorization: "Bearer " + token },
+  });
+  const body = await response.text();
+  if (!response.ok) {
+    throw new Error(
+      "Reindex failed with status " + response.status + ": " + body,
+    );
+  }
+  console.log(body);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : error);
+  process.exitCode = 1;
 }
-
-const response = await fetch(siteUrl + "/api/admin/reindex", {
-  method: "POST",
-  headers: { authorization: "Bearer " + token },
-});
-const body = await response.text();
-if (!response.ok) {
-  console.error("Reindex failed with status " + response.status + ": " + body);
-  process.exit(1);
-}
-console.log(body);

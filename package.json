@@ -7,9 +7,9 @@
   },
   "scripts": {
     "install:ci": "bash scripts/install-ci.sh",
-    "dev": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vite",
+    "dev": "vite",
     "build": "bash scripts/build-verified.sh",
-    "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
+    "start": "vinext start",
     "test": "npm run build && node --test tests/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "deploy": "node --env-file-if-exists=.env scripts/deploy.mjs",
@@ -17,6 +17,8 @@
     "db:migrate:local": "wrangler d1 migrations apply magic-catalog --local --config wrangler.jsonc",
     "db:migrate:remote": "wrangler d1 migrations apply magic-catalog --remote --config wrangler.jsonc",
     "vector:reindex": "node scripts/reindex.mjs",
+    "diagnose": "node scripts/diagnose.mjs",
+    "logs": "wrangler tail magic-catalog --format pretty --config wrangler.jsonc",
     "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate"
   },

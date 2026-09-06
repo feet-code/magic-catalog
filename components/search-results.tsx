@@ -22,6 +22,7 @@ type SearchResponse = {
   generated: boolean;
   generationStatus?: "limited" | "unavailable";
   message?: string;
+  debugId?: string;
   results: ProductSearchResult[];
   error?: string;
 };
@@ -34,28 +35,27 @@ export function SearchResults({
   turnstileSiteKey?: string;
 }) {
   const router = useRouter();
+  const hasValidQuery = initialQuery.trim().length >= 4;
   const [input, setInput] = useState(initialQuery);
   const [results, setResults] = useState<ProductSearchResult[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(hasValidQuery);
   const [message, setMessage] = useState<string>();
-  const [error, setError] = useState<string>();
+  const [error, setError] = useState<string | undefined>(
+    hasValidQuery
+      ? undefined
+      : "Describe a specific problem to search the catalog.",
+  );
+  const [debugId, setDebugId] = useState<string>();
   const [turnstileToken, setTurnstileToken] = useState<string>();
   const receiveToken = useCallback((token: string) => {
     setTurnstileToken(token);
   }, []);
 
   useEffect(() => {
-    if (initialQuery.trim().length < 4) {
-      setLoading(false);
-      setError("Describe a specific problem to search the catalog.");
-      return;
-    }
+    if (!hasValidQuery) return;
     if (turnstileSiteKey && !turnstileToken) return;
 
     const controller = new AbortController();
-    setLoading(true);
-    setError(undefined);
-    setMessage(undefined);
     void fetch("/api/search", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -67,6 +67,7 @@ export function SearchResults({
     })
       .then(async (response) => {
         const body = (await response.json()) as SearchResponse;
+        setDebugId(body.debugId);
         if (!response.ok) throw new Error(body.error || "Search failed.");
         return body;
       })
@@ -96,7 +97,7 @@ export function SearchResults({
       .finally(() => setLoading(false));
 
     return () => controller.abort();
-  }, [initialQuery, turnstileSiteKey, turnstileToken]);
+  }, [hasValidQuery, initialQuery, turnstileSiteKey, turnstileToken]);
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -179,7 +180,10 @@ export function SearchResults({
             </div>
           ) : error ? (
             <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-6 text-sm text-destructive">
-              {error}
+              <p>{error}</p>
+              {debugId ? (
+                <p className="mt-2 font-mono text-xs">Debug ID: {debugId}</p>
+              ) : null}
             </div>
           ) : (
             <>
@@ -195,9 +199,14 @@ export function SearchResults({
                 ) : null}
               </div>
               {message ? (
-                <p className="mb-6 rounded-xl border border-border bg-muted/60 p-4 text-sm leading-6 text-muted-foreground">
-                  {message}
-                </p>
+                <div className="mb-6 rounded-xl border border-border bg-muted/60 p-4 text-sm leading-6 text-muted-foreground">
+                  <p>{message}</p>
+                  {debugId ? (
+                    <p className="mt-2 font-mono text-xs">
+                      Debug ID: {debugId}
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
               <div className="space-y-4">
                 {results.map((result, index) => (

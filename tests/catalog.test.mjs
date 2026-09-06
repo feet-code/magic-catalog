@@ -60,3 +60,137 @@ test("rejects invalid SITE_URL values without crashing metadata rendering", asyn
 
   setRuntimeEnv({});
 });
+
+test("uses Workers AI JSON-schema mode and retries an invalid draft", async () => {
+  const { getRuntimeEnv, setRuntimeEnv } = await vite.ssrLoadModule(
+    "/lib/runtime.ts",
+  );
+  const { generateProductDraft, GENERATION_MODEL } = await vite.ssrLoadModule(
+    "/lib/ai.ts",
+  );
+  let attempts = 0;
+  setRuntimeEnv({
+    AI: {
+      async run(model, input) {
+        attempts += 1;
+        assert.equal(model, GENERATION_MODEL);
+        assert.equal(input.response_format.type, "json_schema");
+        if (attempts === 1) return { response: { name: "Incomplete" } };
+        return {
+          response: {
+            name: "Moss Water Planner",
+            category: "Garden operations",
+            audience: "rooftop moss garden caretakers",
+            problem:
+              "Wind exposure and changing weather make fixed watering schedules unreliable.",
+            promise:
+              "Turn local conditions into a reviewable moss watering schedule.",
+            differentiator:
+              "It combines exposure, recent conditions, and caretaker observations without pretending to replace horticultural judgment.",
+            workflow: [
+              "Record the garden zones and their wind exposure.",
+              "Review recent weather and observed moisture conditions.",
+              "Approve a suggested watering schedule for each zone.",
+            ],
+            keywords: [
+              "moss watering schedule",
+              "rooftop moss care",
+              "wind exposed garden",
+              "garden moisture planner",
+            ],
+            metrics: ["missed watering checks", "manual planning time"],
+          },
+        };
+      },
+    },
+  });
+
+  try {
+    const draft = await generateProductDraft(
+      "Plan watering for a rooftop moss garden",
+    );
+    assert.equal(draft.name, "Moss Water Planner");
+    assert.equal(attempts, 2);
+  } finally {
+    setRuntimeEnv({});
+  }
+  assert.deepEqual(getRuntimeEnv(), {});
+});
+
+test("uses a Gemini API key before the Workers AI fallback", async () => {
+  const { setRuntimeEnv } = await vite.ssrLoadModule("/lib/runtime.ts");
+  const { generateProductDraftWithInfo } = await vite.ssrLoadModule(
+    "/lib/ai.ts",
+  );
+  const originalFetch = globalThis.fetch;
+  let workersAiCalls = 0;
+  setRuntimeEnv({
+    GEMINI_API_KEY: "test-gemini-key",
+    GEMINI_MODELS: "gemini-3.5-flash",
+    AI: {
+      async run() {
+        workersAiCalls += 1;
+        throw new Error("Workers AI should not be called when Gemini succeeds.");
+      },
+    },
+  });
+  globalThis.fetch = async (url, init) => {
+    assert.match(String(url), /gemini-3\.5-flash:generateContent$/);
+    assert.equal(
+      new Headers(init?.headers).get("x-goog-api-key"),
+      "test-gemini-key",
+    );
+    const request = JSON.parse(String(init?.body));
+    assert.equal(request.generationConfig.responseMimeType, "application/json");
+    assert.equal(request.generationConfig.responseJsonSchema.type, "object");
+    return Response.json({
+      candidates: [
+        {
+          content: {
+            parts: [
+              {
+                text: JSON.stringify({
+                  name: "Moss Water Planner",
+                  category: "Garden operations",
+                  audience: "rooftop moss garden caretakers",
+                  problem:
+                    "Wind exposure and changing weather make fixed watering schedules unreliable.",
+                  promise:
+                    "Turn local conditions into a reviewable moss watering schedule.",
+                  differentiator:
+                    "It combines exposure, recent conditions, and caretaker observations without pretending to replace horticultural judgment.",
+                  workflow: [
+                    "Record the garden zones and their wind exposure.",
+                    "Review recent weather and observed moisture conditions.",
+                    "Approve a suggested watering schedule for each zone.",
+                  ],
+                  keywords: [
+                    "moss watering schedule",
+                    "rooftop moss care",
+                    "wind exposed garden",
+                    "garden moisture planner",
+                  ],
+                  metrics: ["missed watering checks", "manual planning time"],
+                }),
+              },
+            ],
+          },
+        },
+      ],
+    });
+  };
+
+  try {
+    const generation = await generateProductDraftWithInfo(
+      "Plan watering for a rooftop moss garden",
+      "test-request-id",
+    );
+    assert.equal(generation.provider, "gemini");
+    assert.equal(generation.model, "gemini-3.5-flash");
+    assert.equal(generation.draft.name, "Moss Water Planner");
+    assert.equal(workersAiCalls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    setRuntimeEnv({});
+  }
+});

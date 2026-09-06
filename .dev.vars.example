@@ -1,4 +1,5 @@
-SITE_URL=http://localhost:4173
+SITE_URL=http://localhost:5173
+MAGIC_CATALOG_URL=https://magic-catalog.cloudwebsites.workers.dev
 GSC_VERIFICATION_TOKEN=
 POSTHOG_PROJECT_API_KEY=
 POSTHOG_INGEST_HOST=https://us.i.posthog.com
@@ -7,7 +8,11 @@ ADMIN_REINDEX_TOKEN=replace-with-a-long-random-value
 TURNSTILE_SITE_KEY=
 TURNSTILE_SECRET_KEY=
 
-# Optional fallback when the Workers AI binding is not available.
+# Required for primary on-demand product generation.
+GEMINI_API_KEY=
+GEMINI_MODELS=gemini-3.5-flash,gemini-2.5-flash,gemini-2.5-flash-lite
+
+# Optional final fallback after Gemini and Workers AI.
 LLM_API_BASE=
 LLM_API_KEY=
 LLM_MODEL=

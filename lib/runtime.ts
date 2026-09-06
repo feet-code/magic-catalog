@@ -37,6 +37,8 @@ export interface MagicCatalogEnv {
   TURNSTILE_SITE_KEY?: string;
   RATE_LIMIT_SALT?: string;
   ADMIN_REINDEX_TOKEN?: string;
+  GEMINI_API_KEY?: string;
+  GEMINI_MODELS?: string;
   LLM_API_BASE?: string;
   LLM_API_KEY?: string;
   LLM_MODEL?: string;

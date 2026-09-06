@@ -10,7 +10,7 @@ The repository starts with exactly 100 hand-curated niche product pages.
 
 - Problem-first search homepage and shareable no-index results pages
 - 100 server-rendered, indexable product pages
-- Cloudflare Workers AI generation with an OpenAI-compatible fallback
+- Gemini API generation with Workers AI and OpenAI-compatible fallbacks
 - Workers AI embeddings plus Vectorize semantic search
 - Indexed lexical fallback for generated products
 - D1 persistence for generated products, search terms, email signups, and abuse limits
@@ -26,7 +26,7 @@ Search and product copy stay honest: dynamically created pages are marked as con
 
 ## Architecture
 
-The application is rendered by one Cloudflare Worker. The initial 100 products are bundled with the Worker, so they load even if D1 is unavailable. New LLM-created products and email signups are stored in D1. Vectorize holds 384-dimensional semantic-search vectors. A compact indexed term table provides a no-AI fallback for generated products.
+The application is rendered by one Cloudflare Worker. The initial 100 products are bundled with the Worker, so they load even if D1 is unavailable. New LLM-created products and email signups are stored in D1. Gemini is the primary product generator; Workers AI remains the automatic fallback and supplies 384-dimensional embeddings for Vectorize. A compact indexed term table provides a no-AI fallback for generated products.
 
 Product pages are rendered by slug at request time, so adding hundreds of thousands of records does not create a million-file build. The sitemap routes split URLs into crawler-safe batches.
 
@@ -36,12 +36,16 @@ Requirements: Node.js 22.13 or newer.
 
 ~~~
 npm ci
-cp .dev.vars.example .dev.vars
+~~~
+
+Create `.dev.vars` from the example. On Windows Command Prompt use `copy .dev.vars.example .dev.vars`; on PowerShell use `Copy-Item .dev.vars.example .dev.vars`; on macOS/Linux use `cp .dev.vars.example .dev.vars`. Then set `GEMINI_API_KEY` and the two random secret values before running:
+
+~~~
 npm run db:migrate:local
 npm run dev
 ~~~
 
-The catalog and lexical search work without an AI provider. For local on-demand generation, fill the OpenAI-compatible LLM values in .dev.vars. Cloudflare Workers AI and Vectorize are used after deployment.
+The catalog and lexical search work without an AI provider. For local on-demand generation, put a free Gemini API key in `GEMINI_API_KEY` inside `.dev.vars`. Workers AI embeddings and Vectorize are used after deployment.
 
 Useful checks:
 
@@ -77,12 +81,15 @@ npm run db:migrate:remote
 
 The migration is required for generated products, rate limiting, and email signups. Reindexing Vectorize does not create the D1 tables. Future `npm run deploy` commands apply pending migrations automatically before uploading the Worker.
 
-4. Add long random values for the two required operational secrets.
+4. Add the Gemini API key and long random values for the two required operational secrets.
 
 ~~~
+npx wrangler secret put GEMINI_API_KEY
 npx wrangler secret put RATE_LIMIT_SALT
 npx wrangler secret put ADMIN_REINDEX_TOKEN
 ~~~
+
+`GEMINI_MODELS` defaults to `gemini-3.5-flash,gemini-2.5-flash,gemini-2.5-flash-lite`. They are tried in that order, so a free-tier rate limit or temporary model failure can fall through to the next model. Override the comma-separated value in `wrangler.jsonc` only if needed.
 
 5. Reuse the same variables as `seo-test`. Copy `.env.example` to the ignored `.env` file, then paste the values you already use there. `npm run deploy` loads `.env` automatically, and values already exported in the shell take precedence.
 
@@ -114,13 +121,41 @@ npm run deploy
 
 The deployment command uploads the shared PostHog values when present, uses the service account to obtain a Google META token, deploys the Worker, waits for the token to become public, verifies the exact URL-prefix property, adds it to Search Console, and submits `sitemap.xml`. Missing PostHog or Google variables leave that integration unchanged, so ordinary code-only deploys still work.
 
-7. Seed the semantic index after the first deployment. Run this with SITE_URL and ADMIN_REINDEX_TOKEN available in the shell:
+7. Seed the semantic index after the first deployment. Put the same `ADMIN_REINDEX_TOKEN` value in an ignored `.dev.vars` file or your shell. The deployed URL is read from `wrangler.jsonc` automatically:
 
 ~~~
 npm run vector:reindex
 ~~~
 
 The endpoint first verifies that the D1 schema is ready, then indexes the 100 bundled concepts in batches and refreshes up to the 1,000 newest generated concepts. Newly generated concepts index themselves automatically.
+
+## Diagnose production
+
+The protected diagnostic checks D1, the Gemini configuration and generation path, Workers AI embeddings, and Vectorize independently. It generates a sample draft without saving a product.
+
+1. If it does not exist yet, copy `.dev.vars.example` to `.dev.vars`.
+2. Set `ADMIN_REINDEX_TOKEN` in `.dev.vars` to the same value uploaded with `wrangler secret put`.
+3. Run:
+
+~~~
+npm run diagnose
+~~~
+
+To diagnose the local dev server instead, leave it running and use:
+
+~~~
+npm run diagnose -- --url http://localhost:5173
+~~~
+
+Each failed check prints a stage, error code, and cause. Public search failures show a Debug ID without exposing internals. To watch structured production logs, start this command and then reproduce the search:
+
+~~~
+npm run logs
+~~~
+
+Find the matching Debug ID in the `product_generation_failed` event. Successful generations emit `product_generation_succeeded`; semantic-search and Vectorize failures are logged separately. Cloudflare's dashboard can also search retained Worker logs when observability is enabled.
+
+Product generation asks Gemini for schema-constrained JSON and validates the result before saving it. Each failed provider/model attempt is logged. The chain is Gemini models, Workers AI JSON-schema mode, then the optional OpenAI-compatible provider.
 
 ## Google Search Console
 
@@ -157,7 +192,7 @@ Treat the database as personal data: limit access, publish a privacy policy befo
 
 ## Free-tier reality
 
-The initial experiment is designed to run inside Cloudflare's free allowances at modest traffic. Current Cloudflare documentation lists 100,000 Worker requests per day, 5 million D1 rows read per day, 100,000 D1 rows written per day, 500 MB per free D1 database, 10,000 free Workers AI neurons per day, and 5 million free stored Vectorize dimensions.
+The initial experiment is designed to run inside Cloudflare's and Gemini's free allowances at modest traffic. Gemini free-tier quotas are project- and model-specific. Current Cloudflare documentation lists 100,000 Worker requests per day, 5 million D1 rows read per day, 100,000 D1 rows written per day, 500 MB per free D1 database, 10,000 free Workers AI neurons per day, and 5 million free stored Vectorize dimensions.
 
 At 384 dimensions, the free Vectorize storage allowance covers roughly 13,000 product vectors, not one million. One million fully generated product records plus their search index will also outgrow a single free D1 database. In other words:
 
@@ -169,6 +204,8 @@ The URL and rendering design already avoids a million-page static build. The sto
 
 Official limits and pricing:
 
+- https://ai.google.dev/gemini-api/docs/pricing
+- https://ai.google.dev/gemini-api/docs/rate-limits
 - https://developers.cloudflare.com/workers/platform/limits/
 - https://developers.cloudflare.com/d1/platform/limits/
 - https://developers.cloudflare.com/d1/platform/pricing/
