@@ -31,8 +31,8 @@ export interface MagicCatalogEnv {
   PRODUCT_INDEX?: VectorIndexBinding;
   SITE_URL?: string;
   GSC_VERIFICATION_TOKEN?: string;
-  POSTHOG_KEY?: string;
-  POSTHOG_HOST?: string;
+  POSTHOG_PROJECT_API_KEY?: string;
+  POSTHOG_INGEST_HOST?: string;
   TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_SITE_KEY?: string;
   RATE_LIMIT_SALT?: string;

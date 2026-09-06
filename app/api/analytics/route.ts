@@ -23,14 +23,13 @@ export async function POST(request: Request) {
   try {
     const payload = bodySchema.parse(await request.json());
     const runtime = getRuntimeEnv();
-    if (!runtime.POSTHOG_KEY) {
+    if (!runtime.POSTHOG_PROJECT_API_KEY) {
       return new Response(null, { status: 204 });
     }
 
-    const host = (runtime.POSTHOG_HOST || "https://us.i.posthog.com").replace(
-      /\/+$/,
-      "",
-    );
+    const host = (
+      runtime.POSTHOG_INGEST_HOST || "https://us.i.posthog.com"
+    ).replace(/\/+$/, "");
     const hostUrl = new URL(host);
     if (hostUrl.protocol !== "https:") {
       return new Response(null, { status: 204 });
@@ -40,7 +39,7 @@ export async function POST(request: Request) {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        api_key: runtime.POSTHOG_KEY,
+        api_key: runtime.POSTHOG_PROJECT_API_KEY,
         event: payload.event,
         properties: {
           distinct_id: payload.anonymousId,

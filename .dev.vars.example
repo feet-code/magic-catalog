@@ -1,7 +1,7 @@
 SITE_URL=http://localhost:4173
 GSC_VERIFICATION_TOKEN=
-POSTHOG_KEY=
-POSTHOG_HOST=https://us.i.posthog.com
+POSTHOG_PROJECT_API_KEY=
+POSTHOG_INGEST_HOST=https://us.i.posthog.com
 RATE_LIMIT_SALT=replace-with-a-long-random-value
 ADMIN_REINDEX_TOKEN=replace-with-a-long-random-value
 TURNSTILE_SITE_KEY=

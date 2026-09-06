@@ -84,28 +84,35 @@ npx wrangler secret put RATE_LIMIT_SALT
 npx wrangler secret put ADMIN_REINDEX_TOKEN
 ~~~
 
-5. Add analytics and verification values when available.
+5. Reuse the same variables as `seo-test`. Copy `.env.example` to the ignored `.env` file, then paste the values you already use there. `npm run deploy` loads `.env` automatically, and values already exported in the shell take precedence.
 
+~~~text
+CLOUDFLARE_API_TOKEN=...
+CLOUDFLARE_ACCOUNT_ID=...
+CLOUDFLARE_WORKERS_SUBDOMAIN=... # harmless here; retained for copy/paste parity
+POSTHOG_PROJECT_ID=...
+POSTHOG_PROJECT_API_KEY=...
+POSTHOG_INGEST_HOST=https://us.i.posthog.com
+GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/service-account.json
+GOOGLE_SEARCH_CONSOLE_OWNER_EMAIL=you@example.com # optional human co-owner
 ~~~
-npx wrangler secret put POSTHOG_KEY
-npx wrangler secret put POSTHOG_HOST
-npx wrangler secret put GSC_VERIFICATION_TOKEN
-~~~
 
-POSTHOG_HOST normally looks like https://us.i.posthog.com or https://eu.i.posthog.com.
+`POSTHOG_PROJECT_ID` is useful to the shared `seo-test` tooling but is not needed by PostHog's event-ingestion request. Magic Catalog uses the identically named `POSTHOG_PROJECT_API_KEY` and `POSTHOG_INGEST_HOST` values. Google credentials stay local; only the generated public verification token is installed in the Worker.
 
-Turnstile is optional. If enabled, both values must be configured:
+Turnstile is optional. If enabled, both values must still be configured directly:
 
 ~~~
 npx wrangler secret put TURNSTILE_SITE_KEY
 npx wrangler secret put TURNSTILE_SECRET_KEY
 ~~~
 
-6. Deploy.
+6. Deploy and configure monitoring.
 
 ~~~
 npm run deploy
 ~~~
+
+The deployment command uploads the shared PostHog values when present, uses the service account to obtain a Google META token, deploys the Worker, waits for the token to become public, verifies the exact URL-prefix property, adds it to Search Console, and submits `sitemap.xml`. Missing PostHog or Google variables leave that integration unchanged, so ordinary code-only deploys still work.
 
 7. Seed the semantic index after the first deployment. Run this with SITE_URL and ADMIN_REINDEX_TOKEN available in the shell:
 
@@ -117,16 +124,15 @@ The endpoint first verifies that the D1 schema is ready, then indexes the 100 bu
 
 ## Google Search Console
 
-1. Add the final domain or URL-prefix property in Search Console.
-2. Set GSC_VERIFICATION_TOKEN to the token value only, then redeploy.
-3. Verify the property.
-4. Submit https://YOUR_DOMAIN/sitemap.xml.
+Enable the Google Site Verification API and Search Console API for the same service-account project used by `seo-test`, then set `GOOGLE_APPLICATION_CREDENTIALS` to that existing JSON key before `npm run deploy`. No expiring user OAuth grant is involved.
 
-The verification token is emitted as the standard google-site-verification meta tag. Search results pages and API routes are excluded from indexing; product pages are canonical and indexable.
+The deploy command is idempotent: it reuses existing service-account ownership when available, optionally delegates ownership to `GOOGLE_SEARCH_CONSOLE_OWNER_EMAIL`, ensures the URL-prefix property is in GSC, and resubmits the sitemap. Once registered, Magic Catalog appears automatically in the existing Search Portfolio dashboard. Its `/product/<slug>` URLs appear as individual rows in the dashboard's **Product pages** view; pages with no GSC impressions or clicks yet are not returned by Google's performance API.
+
+The generated verification token is emitted as the standard `google-site-verification` meta tag. Search results pages and API routes are excluded from indexing; product pages are canonical and indexable.
 
 ## PostHog
 
-Use the same project key as another site if all experiments should appear in one PostHog project. The application forwards a small allowlisted event payload server-side and never includes the signup email in PostHog.
+Use the same `POSTHOG_PROJECT_API_KEY` and `POSTHOG_INGEST_HOST` as `seo-test` if all experiments should appear in one PostHog project. The application forwards a small allowlisted event payload server-side and never includes the signup email in PostHog.
 
 Events:
 
