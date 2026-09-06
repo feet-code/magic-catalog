@@ -12,6 +12,7 @@
     "start": "vinext start",
     "test": "npm run build && node --test tests/*.test.mjs",
     "typecheck": "tsc --noEmit",
+    "login:cloudflare": "wrangler login --use-keyring",
     "deploy": "node --env-file-if-exists=.env scripts/deploy.mjs",
     "deploy:worker": "npm run build && npm run db:migrate:remote && wrangler deploy --config wrangler.jsonc",
     "db:migrate:local": "wrangler d1 migrations apply magic-catalog --local --config wrangler.jsonc",
