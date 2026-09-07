@@ -1,8 +1,11 @@
+import { catalogDirectoryCount } from "../../../lib/catalog-directory";
 import { catalogSitemapRows } from "../../../lib/catalog-sitemap";
 import { seedProducts } from "../../../lib/seed-products";
 import { getSiteUrl } from "../../../lib/runtime";
 
 export const dynamic = "force-dynamic";
+const PRODUCT_SITEMAP_PAGE_SIZE = 44_900;
+const DIRECTORY_PAGE_SIZE = 250;
 
 export async function GET(
   _request: Request,
@@ -11,16 +14,31 @@ export async function GET(
   const raw = (await context.params).page;
   if (!/^\d+$/.test(raw)) return new Response("Not found", { status: 404 });
   const page = Number(raw);
-  const dynamicRows = await catalogSitemapRows(page, 44_900);
+  const dynamicRows = await catalogSitemapRows(page, PRODUCT_SITEMAP_PAGE_SIZE);
   const origin = getSiteUrl();
   const staticRows =
     page === 0
       ? [
           { slug: "", createdAt: "2026-09-05T00:00:00.000Z" },
+          { slug: "catalog", createdAt: new Date().toISOString() },
           ...seedProducts.map((product) => ({
             slug: "product/" + product.slug,
             createdAt: product.createdAt,
           })),
+          ...(await catalogDirectoryCount()) > DIRECTORY_PAGE_SIZE
+            ? Array.from(
+                {
+                  length:
+                    Math.ceil(
+                      (await catalogDirectoryCount()) / DIRECTORY_PAGE_SIZE,
+                    ) - 1,
+                },
+                (_, directoryPage) => ({
+                  slug: "catalog/" + (directoryPage + 1),
+                  createdAt: new Date().toISOString(),
+                }),
+              )
+            : [],
         ]
       : [];
   const rows = [
