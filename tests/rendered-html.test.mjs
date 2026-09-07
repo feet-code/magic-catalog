@@ -34,7 +34,7 @@ test("renders the search-first catalog homepage", async () => {
   assert.match(html, /overdue-invoice-rescue/);
 });
 
-test("renders an indexable product page with signup and FAQ content", async () => {
+test("renders an indexable, domain-neutral product page with expanded FAQ content", async () => {
   const worker = await loadWorker();
   const response = await worker.fetch(
     new Request("http://localhost/product/overdue-invoice-rescue", {
@@ -48,10 +48,17 @@ test("renders an indexable product page with signup and FAQ content", async () =
   assert.match(html, /Invoice Rescue/);
   assert.match(html, /Get product updates/);
   assert.match(html, /Questions about/);
+  assert.match(html, /How to evaluate products in/);
+  assert.match(html, /What should I ask during a trial or demo/);
+  assert.match(html, /What are common alternatives to/);
   assert.match(html, /application\/ld\+json/);
   assert.doesNotMatch(
     html,
     /transparent concept|not a launched service|created from a catalog search|initial concept/i,
+  );
+  assert.doesNotMatch(
+    html,
+    /the operational gap|why the current workflow breaks|practical rollout|how to introduce a better workflow/i,
   );
 });
 
