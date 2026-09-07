@@ -1,4 +1,4 @@
-export type ProductSource = "seed" | "generated";
+export type ProductSource = "seed" | "generated" | "catalog";
 
 export type Product = {
   id: string;
@@ -15,6 +15,7 @@ export type Product = {
   source: ProductSource;
   createdAt: string;
   originQuery?: string;
+  intentKey?: string;
 };
 
 export type ProductSearchResult = Pick<
