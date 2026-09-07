@@ -29,9 +29,12 @@ const productSchema = z.object({
   problem: z.string().trim().min(12).max(800),
   promise: z.string().trim().min(8).max(300),
   differentiator: z.string().trim().min(8).max(800),
-  workflow: z.array(z.string().trim().min(3).max(240)).min(1).max(8),
+  // These are legacy field names. Product pages treat workflow as optional use
+  // cases and metrics as optional evaluation signals, so broad catalog imports
+  // should not invent either field when the source product does not have them.
+  workflow: z.array(z.string().trim().min(3).max(240)).max(8).default([]),
   keywords: z.array(z.string().trim().min(2).max(80)).min(1).max(16),
-  metrics: z.array(z.string().trim().min(2).max(120)).min(1).max(8),
+  metrics: z.array(z.string().trim().min(2).max(120)).max(8).default([]),
   intentKey: z.string().trim().min(2).max(96),
   createdAt: z.string().datetime().optional(),
 });
