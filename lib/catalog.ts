@@ -2,6 +2,7 @@ import { eq, inArray } from "drizzle-orm";
 import { getDb } from "../db";
 import { productTerms, products } from "../db/schema";
 import type { Product, ProductSearchResult } from "./product-types";
+import { getScalableProductBySlug } from "./scalable-catalog";
 import { seedProductBySlug, seedProducts } from "./seed-products";
 import { getRuntimeEnv } from "./runtime";
 
@@ -123,7 +124,12 @@ export function rowToProduct(row: typeof products.$inferSelect): Product {
     workflow: parseStringArray(row.workflowJson, []),
     keywords: parseStringArray(row.keywordsJson, []),
     metrics: parseStringArray(row.metricsJson, []),
-    source: row.source === "seed" ? "seed" : "generated",
+    source:
+      row.source === "seed"
+        ? "seed"
+        : row.source === "catalog"
+          ? "catalog"
+          : "generated",
     createdAt: row.createdAt,
     originQuery: row.originQuery ?? undefined,
   };
@@ -132,6 +138,9 @@ export function rowToProduct(row: typeof products.$inferSelect): Product {
 export async function getProductBySlug(slug: string): Promise<Product | null> {
   const seed = seedProductBySlug.get(slug);
   if (seed) return seed;
+
+  const scalable = await getScalableProductBySlug(slug);
+  if (scalable) return scalable;
 
   try {
     const [row] = await getDb()
