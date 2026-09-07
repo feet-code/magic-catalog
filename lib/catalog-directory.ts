@@ -1,6 +1,6 @@
 import { dynamicProductCount } from "./catalog";
 import { getRuntimeEnv, getSearchShards } from "./runtime";
-import { scalableProductCount, shardIndexForSlug } from "./scalable-catalog";
+import { scalableProductCount } from "./scalable-catalog";
 import { seedProducts } from "./seed-products";
 
 export type CatalogDirectoryRow = {
