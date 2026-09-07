@@ -78,7 +78,7 @@ const geminiProductJsonSchema = {
     name: { type: "string", description: "A specific 3-64 character name." },
     category: {
       type: "string",
-      description: "A concise 3-48 character software category.",
+      description: "A concise 3-48 character product category.",
     },
     audience: {
       type: "string",
@@ -86,7 +86,7 @@ const geminiProductJsonSchema = {
     },
     problem: {
       type: "string",
-      description: "The concrete operational problem in 20-360 characters.",
+      description: "The concrete user problem, need, or job to be done in 20-360 characters.",
     },
     promise: {
       type: "string",
@@ -98,21 +98,23 @@ const geminiProductJsonSchema = {
     },
     workflow: {
       type: "array",
-      description: "Exactly three concise workflow steps.",
+      description:
+        "Exactly three concrete use cases, actions, or ways someone would use the product. They do not need to form a sequence.",
       minItems: 3,
       maxItems: 3,
       items: { type: "string" },
     },
     keywords: {
       type: "array",
-      description: "Four to eight realistic search phrases.",
+      description: "Four to eight realistic search phrases potential users might use.",
       minItems: 4,
       maxItems: 8,
       items: { type: "string" },
     },
     metrics: {
       type: "array",
-      description: "Two to four measurable operational outcomes.",
+      description:
+        "Two to four useful outcomes, quality signals, or evaluation criteria users may care about.",
       minItems: 2,
       maxItems: 4,
       items: { type: "string" },
@@ -141,20 +143,22 @@ function generationMessages(query: string) {
     {
       role: "system",
       content: [
-        "You write complete catalog records for focused software products that solve real operational problems.",
+        "You write complete catalog records for focused software products and digital tools that solve a real user need or job to be done.",
         "Return only one valid JSON object and no markdown.",
         "Use present tense and describe the product and its capabilities directly.",
         "Do not mention product generation, concepts, experiments, prototypes, validation, testing demand, future construction, or whether the product exists.",
+        "Do not force the product into a business-operations or multi-step workflow framing when that does not fit.",
         "Be specific, useful, confident, and avoid unsupported performance claims.",
         "Use exactly these keys: name, category, audience, problem, promise, differentiator, workflow, keywords, metrics.",
-        "workflow must be an array of 3 concise steps. keywords must contain 4 to 8 realistic search phrases.",
-        "metrics must contain 2 to 4 operational outcomes that do not make unsupported claims.",
+        "workflow is a legacy field name: fill it with 3 concise use cases, actions, or ways someone would use the product; they do not need to be sequential.",
+        "keywords must contain 4 to 8 realistic search phrases a potential user could genuinely search for.",
+        "metrics must contain 2 to 4 useful outcomes, quality signals, or evaluation criteria without unsupported claims.",
       ].join(" "),
     },
     {
       role: "user",
       content:
-        "Create a focused software product record for this request: " +
+        "Create a focused software or digital product record for this request: " +
         JSON.stringify(query.slice(0, 320)),
     },
   ];
