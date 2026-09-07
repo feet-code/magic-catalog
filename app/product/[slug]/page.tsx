@@ -236,7 +236,7 @@ export default async function ProductPage({
           <div className="max-w-3xl">
             <section>
               <p className="text-sm font-bold uppercase tracking-[0.16em] text-primary">
-                Search intent: the need
+                The need
               </p>
               <h2 className="mt-4 text-3xl font-black tracking-[-0.04em] md:text-4xl">
                 What problem does {product.name} solve?
@@ -255,8 +255,8 @@ export default async function ProductPage({
               </h2>
               <p className="mt-6 text-lg leading-8 text-foreground/75">
                 {product.name} is designed for {product.audience}. The strongest
-                fit is a user dealing with the problem described above and
-                looking for the outcome in {cleanSentence(product.promise)}
+                fit is someone facing the problem above and looking for this
+                outcome: {cleanSentence(product.promise)}
               </p>
             </section>
 
