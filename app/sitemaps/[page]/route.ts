@@ -14,7 +14,10 @@ export async function GET(
   const raw = (await context.params).page;
   if (!/^\d+$/.test(raw)) return new Response("Not found", { status: 404 });
   const page = Number(raw);
-  const dynamicRows = await catalogSitemapRows(page, PRODUCT_SITEMAP_PAGE_SIZE);
+  const [dynamicRows, directoryCount] = await Promise.all([
+    catalogSitemapRows(page, PRODUCT_SITEMAP_PAGE_SIZE),
+    page === 0 ? catalogDirectoryCount() : Promise.resolve(0),
+  ]);
   const origin = getSiteUrl();
   const staticRows =
     page === 0
@@ -25,20 +28,18 @@ export async function GET(
             slug: "product/" + product.slug,
             createdAt: product.createdAt,
           })),
-          ...(await catalogDirectoryCount()) > DIRECTORY_PAGE_SIZE
-            ? Array.from(
-                {
-                  length:
-                    Math.ceil(
-                      (await catalogDirectoryCount()) / DIRECTORY_PAGE_SIZE,
-                    ) - 1,
-                },
-                (_, directoryPage) => ({
-                  slug: "catalog/" + (directoryPage + 1),
-                  createdAt: new Date().toISOString(),
-                }),
-              )
-            : [],
+          ...Array.from(
+            {
+              length: Math.max(
+                0,
+                Math.ceil(directoryCount / DIRECTORY_PAGE_SIZE) - 1,
+              ),
+            },
+            (_, directoryPage) => ({
+              slug: "catalog/" + (directoryPage + 1),
+              createdAt: new Date().toISOString(),
+            }),
+          ),
         ]
       : [];
   const rows = [
