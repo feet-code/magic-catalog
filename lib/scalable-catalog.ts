@@ -270,7 +270,19 @@ export async function getScalableProductBySlug(slug: string): Promise<Product | 
   }
 }
 
-export async function upsertScalableProduct(product: Product, intentKey: string) {
+export type WriteMeter = { rowsWritten: number; measured: boolean };
+
+export function recordD1Writes(meter: WriteMeter | undefined, result: { meta?: { rows_written?: number } }) {
+  if (!meter) return;
+  const value = result.meta?.rows_written;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    meter.measured = false;
+    return;
+  }
+  meter.rowsWritten += value;
+}
+
+export async function upsertScalableProduct(product: Product, intentKey: string, meter?: WriteMeter) {
   const runtime = getRuntimeEnv();
   const shards = getSearchShards();
   if (!runtime.PRODUCT_BODIES || !shards.length) {
@@ -294,7 +306,7 @@ export async function upsertScalableProduct(product: Product, intentKey: string)
     customMetadata: { slug: product.slug, intent: cleanIntentKey },
   });
 
-  await db
+  recordD1Writes(meter, await db
     .prepare(
       "INSERT INTO catalog_products " +
         "(slug, name, category, audience, problem_excerpt, promise, source, storage_key, intent_key, created_at) " +
@@ -316,7 +328,7 @@ export async function upsertScalableProduct(product: Product, intentKey: string)
       cleanIntentKey,
       product.createdAt,
     )
-    .run();
+    .run());
 
   const metadata = await db
     .prepare("SELECT id FROM catalog_products WHERE slug = ?1 LIMIT 1")
@@ -324,28 +336,28 @@ export async function upsertScalableProduct(product: Product, intentKey: string)
     .first<{ id: number }>();
   if (!metadata) throw new Error("Catalog metadata write did not return a row.");
 
-  await db
+  recordD1Writes(meter, await db
     .prepare("DELETE FROM catalog_products_fts WHERE rowid = ?1")
     .bind(metadata.id)
-    .run();
-  await db
+    .run());
+  recordD1Writes(meter, await db
     .prepare(
       "INSERT INTO catalog_products_fts(rowid, slug, intent_key, search_text) VALUES (?1, ?2, ?3, ?4)",
     )
     .bind(metadata.id, product.slug, cleanIntentKey, productSearchText(stored))
-    .run();
+    .run());
 
   return { shardIndex, storageKey };
 }
 
-export async function upsertIntentClusterRecord(cluster: IntentCluster) {
+export async function upsertIntentClusterRecord(cluster: IntentCluster, meter?: WriteMeter) {
   const db = getRuntimeEnv().DB;
   if (!db) throw new Error("Primary D1 DB binding is required for intent clusters.");
   const key = cluster.key.trim().slice(0, 96);
   const label = cluster.label.trim().slice(0, 160);
   const searchText = cluster.searchText.trim().slice(0, 1200);
   if (!key || !label || !searchText) throw new Error("Intent cluster key, label, and searchText are required.");
-  await db
+  recordD1Writes(meter, await db
     .prepare(
       "INSERT INTO intent_clusters (intent_key, label, search_text, product_count, updated_at) " +
         "VALUES (?1, ?2, ?3, ?4, ?5) " +
@@ -359,7 +371,7 @@ export async function upsertIntentClusterRecord(cluster: IntentCluster) {
       Math.max(0, Math.floor(cluster.productCount ?? 0)),
       new Date().toISOString(),
     )
-    .run();
+    .run());
   return { key, label, searchText };
 }
 

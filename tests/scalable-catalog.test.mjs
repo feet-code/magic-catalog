@@ -155,3 +155,70 @@ test("R2-backed products can be read without the legacy D1 products table", asyn
     setRuntimeEnv({});
   }
 });
+
+test("ingest preflight, free request cap, and actual write totals", async () => {
+  const { setRuntimeEnv } = await vite.ssrLoadModule('/lib/runtime.ts');
+  const { GET, POST } = await vite.ssrLoadModule('/app/api/admin/catalog/ingest/route.ts');
+  let writes = 0;
+  const db = { prepare() { return { bind() { return {
+    async run() { writes += 3; return { success: true, meta: { rows_written: 3 } }; },
+    async first() { return { id: 1 }; },
+  }; } }; } };
+  const product = {
+    slug:'sample-product',name:'Sample Product',category:'Accounting',audience:'Freelance businesses',
+    problem:'Following up on invoices consumes time.',promise:'Keep collection tasks organized.',
+    differentiator:'A focused queue tracks outstanding balances.',workflow:['Import invoices'],
+    keywords:['billing'],metrics:['Open balances'],intentKey:'invoice-operations',
+  };
+  setRuntimeEnv({ DB:db, SEARCH_DB_0:db, PRODUCT_BODIES:{ async put() {} },ADMIN_REINDEX_TOKEN:'test' });
+  const request = body => new Request('https://catalog.example/api/admin/catalog/ingest',{
+    method:'POST',headers:{authorization:'Bearer test','content-type':'application/json'},body:JSON.stringify(body),
+  });
+  try {
+    assert.equal((await GET(new Request('https://catalog.example/api/admin/catalog/ingest'))).status,404);
+    const capabilities = await (await GET(new Request('https://catalog.example/api/admin/catalog/ingest',{
+      headers:{authorization:'Bearer test'},
+    }))).json();
+    assert.equal(capabilities.usageReportingVersion,1);
+    assert.equal(capabilities.maxProducts,7);
+    const invalid = await POST(request({products:Array.from({length:8},()=>product)}));
+    assert.equal(invalid.status,400);
+    assert.equal(writes,0);
+    const result = await POST(request({products:[product],intents:[{
+      key:'invoice-operations',label:'Invoice operations',searchText:'Invoice collections and billing reminders',
+    }]}));
+    assert.equal(result.status,200);
+    const payload = await result.json();
+    assert.equal(payload.usage.rowsWritten,12); // intent + metadata + FTS delete + FTS insert
+    assert.equal(payload.written[0].slug,product.slug);
+  } finally { setRuntimeEnv({}); }
+});
+
+test("ingest reports partial write counts on failure and unknown counts honestly", async () => {
+  const { setRuntimeEnv } = await vite.ssrLoadModule('/lib/runtime.ts');
+  const { POST } = await vite.ssrLoadModule('/app/api/admin/catalog/ingest/route.ts');
+  let calls=0;
+  let measured=true;
+  const db={ prepare() { return { bind() { return {
+    async run() { return measured ? {meta:{rows_written:2}} : {success:true}; },
+    async first() { return {id:1}; },
+  }; } }; } };
+  const product={slug:'partial-product',name:'Partial Product',category:'Billing',audience:'Small businesses',
+    problem:'Collection tasks get lost across spreadsheets.',promise:'Organize outstanding balances.',
+    differentiator:'Prioritized follow-up tasks for teams.',workflow:['Review invoices'],keywords:['billing'],
+    metrics:['Open balances'],intentKey:'invoice-operations'};
+  setRuntimeEnv({DB:db,SEARCH_DB_0:db,ADMIN_REINDEX_TOKEN:'test',PRODUCT_BODIES:{async put(){
+    calls+=1;if(calls===2)throw new Error('simulated R2 failure');
+  }}});
+  const request=products=>new Request('https://catalog.example/api/admin/catalog/ingest',{
+    method:'POST',headers:{authorization:'Bearer test','content-type':'application/json'},body:JSON.stringify({products}),
+  });
+  try {
+    const failure=await POST(request([product,{...product,slug:'second-product'}]));
+    assert.equal(failure.status,500);
+    assert.equal((await failure.json()).usage.rowsWritten,6);
+    measured=false;
+    const unknown=await POST(request([product]));
+    assert.equal((await unknown.json()).usage.rowsWritten,null);
+  } finally {setRuntimeEnv({});}
+});

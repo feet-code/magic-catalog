@@ -37,9 +37,21 @@ const productSchema = z.object({
 });
 
 const bodySchema = z.object({
-  intents: z.array(intentSchema).max(25).default([]),
-  products: z.array(productSchema).min(1).max(25),
+  intents: z.array(intentSchema).max(7).default([]),
+  products: z.array(productSchema).min(1).max(7),
 });
+
+export async function GET(request: Request) {
+  const runtime = getRuntimeEnv();
+  const headers = { "cache-control": "no-store" };
+  if (!runtime.ADMIN_REINDEX_TOKEN || request.headers.get("authorization") !== "Bearer " + runtime.ADMIN_REINDEX_TOKEN) {
+    return Response.json({ error: "Not found." }, { status: 404, headers });
+  }
+  if (!runtime.PRODUCT_BODIES || !getSearchShards().length) {
+    return Response.json({ error: "Run npm run scale:setup and deploy again." }, { status: 503, headers });
+  }
+  return Response.json({ usageReportingVersion: 1, maxProducts: 7 }, { headers });
+}
 
 export async function POST(request: Request) {
   const runtime = getRuntimeEnv();
@@ -64,10 +76,12 @@ export async function POST(request: Request) {
     );
   }
 
+  const meter = { rowsWritten: 0, measured: true };
+  const usage = () => ({ rowsWritten: meter.measured ? meter.rowsWritten : null });
   try {
     const payload = bodySchema.parse(await request.json());
     for (const intent of payload.intents) {
-      await upsertIntentClusterRecord(intent);
+      await upsertIntentClusterRecord(intent, meter);
     }
     if (payload.intents.length) {
       try {
@@ -98,7 +112,7 @@ export async function POST(request: Request) {
         createdAt: input.createdAt ?? new Date().toISOString(),
         intentKey: input.intentKey,
       };
-      const stored = await upsertScalableProduct(product, input.intentKey);
+      const stored = await upsertScalableProduct(product, input.intentKey, meter);
       written.push({ slug: product.slug, shard: stored.shardIndex });
     }
 
@@ -110,6 +124,7 @@ export async function POST(request: Request) {
     return Response.json(
       {
         ok: true,
+        usage: usage(),
         products: written.length,
         intents: payload.intents.length,
         written,
@@ -129,7 +144,7 @@ export async function POST(request: Request) {
       failure: diagnosticDetails(error),
     });
     return Response.json(
-      { error: "Catalog ingest failed.", debugId: requestId },
+      { error: "Catalog ingest failed.", debugId: requestId, usage: usage() },
       { status: 500, headers },
     );
   }

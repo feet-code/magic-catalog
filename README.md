@@ -107,7 +107,7 @@ Authorization: Bearer <ADMIN_REINDEX_TOKEN>
 Content-Type: application/json
 ```
 
-Each request accepts up to 25 products and up to 25 intent definitions. The Product Hunt scraper can call this endpoint directly after it has normalized/rebranded a product.
+Each request accepts up to 7 products and up to 7 intent definitions, leaving headroom under Workers Free per-request query/subrequest limits. The Product Hunt scraper can call this endpoint directly after it has normalized/rebranded a product.
 
 Example payload shape:
 
@@ -191,8 +191,8 @@ Important practical constraints:
 - 384-dimensional vectors should be reserved for intent clusters. Around 10,000 clusters consume about 3.84 million stored dimensions.
 - Free D1 databases have a 500 MB per-database ceiling, so large search data is split across eight shards.
 - Keep the primary D1 small; full imported product bodies belong in R2, not the primary database.
-- Cloudflare Free currently allows 100,000 D1 rows written per day. A new scalable product normally creates/updates one compact metadata row plus one FTS row. Do not try to load all one million products in a single day while staying free.
-- For a free-only bulk load, pace ingestion to roughly 40,000-45,000 new products/day or lower so there is headroom for normal application writes and retries.
+- Cloudflare Free currently allows 100,000 D1 rows written per day. A product creates/updates compact metadata and FTS data; indexes and FTS internals also contribute writes. Do not try to load all one million products in a single day while staying free.
+- Budget bulk ingestion using measured D1 `meta.rows_written`, including index and FTS maintenance. There is no fixed safe products/day conversion. The two scrapers share a conservative local write budget and leave headroom for normal activity.
 - R2 storage must also remain under its free storage allowance. Keep product JSON compact and do not store scraped images or large duplicated documents in each object.
 - Worker request and D1 read quotas still matter once traffic/crawling becomes large. At that point paying a small amount is preferable to degrading search quality solely to preserve a $0 bill.
 
@@ -260,3 +260,11 @@ GOOGLE_SEARCH_CONSOLE_OWNER_EMAIL=you@example.com
 - Bulk catalog ingest is protected by `ADMIN_REINDEX_TOKEN`.
 - R2 product JSON is not publicly exposed as a bucket; the Worker reads it through a binding.
 - Scale-resource failures fall back to the existing catalog rather than taking down search.
+
+## Measured ingestion for batched scrapers
+
+Deploy this version before using the updated Acquire and Product Hunt publishers. Authenticated `GET /api/admin/catalog/ingest` returns `{ "usageReportingVersion": 1, "maxProducts": 7 }` without database writes. It returns 503 if scalable bindings are missing.
+
+Successful POST responses include `usage.rowsWritten`, summing D1-reported write counts for intent registration, metadata upserts, FTS deletion and FTS insertion. This includes the index work reported by D1. Error responses report successfully observed partial write counts; unavailable measurements are null, never an invented zero. The clients retain conservative reservations after failed requests.
+
+The two Python scrapers separately support scraping, adaptive 25–100 item Gemini requests, and publishing. They negotiate the smaller server import cap automatically and share a local ledger for Gemini cooldowns and D1 write budgets. They require `ADMIN_REINDEX_TOKEN`; do not configure these clients for the legacy `/api/admin/import-products` path.
