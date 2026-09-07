@@ -1,6 +1,7 @@
 import { ArrowUpRight, Asterisk, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { HomeSearch } from "../components/home-search";
+import { catalogProductCount } from "../lib/catalog-sitemap";
 import { seedProducts } from "../lib/seed-products";
 
 const examples = [
@@ -9,8 +10,12 @@ const examples = [
   "compare residential solar proposals",
 ];
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
   const featured = seedProducts.slice(0, 12);
+  const productCount = seedProducts.length + (await catalogProductCount());
+
   return (
     <main className="min-h-screen">
       <section className="catalog-grid border-b border-border">
@@ -22,10 +27,12 @@ export default function Home() {
             >
               MAGIC/CATALOG
             </Link>
-            <div className="flex items-center gap-2 rounded-full border border-border bg-white/80 px-3 py-1.5 text-xs font-semibold text-muted-foreground backdrop-blur">
-              <span className="size-2 rounded-full bg-accent-foreground" />
-              100 products
-            </div>
+            <Link
+              href="/catalog"
+              className="rounded-full border border-border bg-white/80 px-3 py-1.5 text-xs font-semibold text-muted-foreground backdrop-blur hover:text-primary"
+            >
+              {productCount.toLocaleString()} products
+            </Link>
           </header>
 
           <div className="flex flex-1 items-center py-16 md:py-24">
@@ -111,22 +118,27 @@ export default function Home() {
           ))}
         </div>
 
-        <details className="mt-16 rounded-2xl border border-border bg-card">
-          <summary className="cursor-pointer list-none px-6 py-5 font-bold marker:hidden">
-            Browse all 100 products
-          </summary>
-          <div className="grid gap-x-8 gap-y-3 border-t border-border px-6 py-6 sm:grid-cols-2 lg:grid-cols-3">
-            {seedProducts.map((product) => (
-              <Link
-                key={product.slug}
-                href={"/product/" + product.slug}
-                className="text-sm leading-6 text-muted-foreground hover:text-primary"
-              >
-                {product.name}
-              </Link>
-            ))}
+        <div className="mt-16 rounded-2xl border border-border bg-card px-6 py-6 md:flex md:items-center md:justify-between md:gap-8">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-primary">
+              Full catalog
+            </p>
+            <p className="mt-2 text-xl font-black tracking-[-0.03em]">
+              Browse all {productCount.toLocaleString()} product pages.
+            </p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              Every product has its own crawlable URL and is linked from the
+              paginated catalog directory.
+            </p>
           </div>
-        </details>
+          <Link
+            href="/catalog"
+            className="mt-5 inline-flex shrink-0 items-center gap-2 rounded-full bg-foreground px-5 py-3 text-sm font-bold text-background hover:opacity-90 md:mt-0"
+          >
+            Browse catalog
+            <ArrowUpRight className="size-4" />
+          </Link>
+        </div>
       </section>
 
       <footer className="border-t border-border bg-foreground text-background">
