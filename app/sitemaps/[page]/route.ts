@@ -1,4 +1,4 @@
-import { dynamicSitemapRows } from "../../../lib/catalog";
+import { catalogSitemapRows } from "../../../lib/catalog-sitemap";
 import { seedProducts } from "../../../lib/seed-products";
 import { getSiteUrl } from "../../../lib/runtime";
 
@@ -11,7 +11,7 @@ export async function GET(
   const raw = (await context.params).page;
   if (!/^\d+$/.test(raw)) return new Response("Not found", { status: 404 });
   const page = Number(raw);
-  const dynamicRows = await dynamicSitemapRows(page, 44_900);
+  const dynamicRows = await catalogSitemapRows(page, 44_900);
   const origin = getSiteUrl();
   const staticRows =
     page === 0
