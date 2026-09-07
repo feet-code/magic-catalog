@@ -1,11 +1,11 @@
-import { dynamicProductCount } from "../../lib/catalog";
+import { catalogProductCount } from "../../lib/catalog-sitemap";
 import { getSiteUrl } from "../../lib/runtime";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const dynamicCount = await dynamicProductCount();
-  const pages = Math.max(1, Math.ceil(dynamicCount / 44_900));
+  const productCount = await catalogProductCount();
+  const pages = Math.max(1, Math.ceil(productCount / 44_900));
   const origin = getSiteUrl();
   const entries = Array.from(
     { length: pages },
