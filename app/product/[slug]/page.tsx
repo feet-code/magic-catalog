@@ -29,10 +29,26 @@ function cleanItems(values: string[], limit: number) {
   ).slice(0, limit);
 }
 
+function cleanSentence(value: string) {
+  const clean = value.trim();
+  if (!clean) return "";
+  return /[.!?]$/.test(clean) ? clean : clean + ".";
+}
+
 function descriptionFor(
   product: NonNullable<Awaited<ReturnType<typeof getProductBySlug>>>,
 ) {
-  return (product.promise + " For " + product.audience + ".").slice(0, 158);
+  return (
+    product.name +
+    " is a " +
+    product.category +
+    " product for " +
+    product.audience +
+    ". " +
+    product.promise
+  )
+    .replace(/\s+/g, " ")
+    .slice(0, 158);
 }
 
 export async function generateMetadata({
@@ -44,12 +60,13 @@ export async function generateMetadata({
   return {
     title: product.name + " | " + product.category,
     description: descriptionFor(product),
+    keywords: product.keywords,
     alternates: { canonical },
     robots: { index: true, follow: true },
     openGraph: {
       type: "website",
       url: canonical,
-      title: product.name,
+      title: product.name + " | " + product.category,
       description: descriptionFor(product),
     },
   };
@@ -66,6 +83,8 @@ export default async function ProductPage({
   const useCases = cleanItems(product.workflow, 6);
   const outcomes = cleanItems(product.metrics, 6);
   const relatedSearches = cleanItems(product.keywords, 10);
+  const runtime = getRuntimeEnv();
+  const productUrl = getSiteUrl() + "/product/" + product.slug;
 
   // The bundled seed catalog can cheaply calculate related products in memory.
   // Million-product R2/D1 pages intentionally do not fan out across every
@@ -78,19 +97,45 @@ export default async function ProductPage({
           .slice(0, 3)
       : [];
 
-  const runtime = getRuntimeEnv();
   const structuredData = {
     "@context": "https://schema.org",
-    "@type": "Product",
-    name: product.name,
-    description: descriptionFor(product),
-    category: product.category,
-    keywords: product.keywords.join(", "),
-    audience: {
-      "@type": "Audience",
-      audienceType: product.audience,
-    },
-    url: getSiteUrl() + "/product/" + product.slug,
+    "@graph": [
+      {
+        "@type": "Product",
+        name: product.name,
+        description: descriptionFor(product),
+        category: product.category,
+        keywords: product.keywords.join(", "),
+        audience: {
+          "@type": "Audience",
+          audienceType: product.audience,
+        },
+        url: productUrl,
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          {
+            "@type": "ListItem",
+            position: 1,
+            name: "Home",
+            item: getSiteUrl() + "/",
+          },
+          {
+            "@type": "ListItem",
+            position: 2,
+            name: "Catalog",
+            item: getSiteUrl() + "/catalog",
+          },
+          {
+            "@type": "ListItem",
+            position: 3,
+            name: product.name,
+            item: productUrl,
+          },
+        ],
+      },
+    ],
   };
 
   return (
@@ -146,9 +191,21 @@ export default async function ProductPage({
               <p className="mt-7 max-w-3xl text-xl font-medium leading-8 text-foreground/80 md:text-2xl md:leading-9">
                 {product.promise}
               </p>
-              <p className="mt-6 max-w-3xl text-base leading-7 text-muted-foreground md:text-lg md:leading-8">
-                Built for {product.audience}.
-              </p>
+
+              <div className="mt-8 max-w-3xl rounded-2xl border border-border bg-white/85 p-6 md:p-7">
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-primary">
+                  What is {product.name}?
+                </p>
+                <p className="mt-4 text-base leading-7 text-foreground/80 md:text-lg md:leading-8">
+                  <strong className="font-bold text-foreground">{product.name}</strong>{" "}
+                  is a {product.category} product built for {product.audience}. Its
+                  core purpose is straightforward: {cleanSentence(product.promise)}
+                </p>
+                <p className="mt-4 text-base leading-7 text-muted-foreground md:text-lg md:leading-8">
+                  The need behind it is specific: {cleanSentence(product.problem)}{" "}
+                  {cleanSentence(product.differentiator)}
+                </p>
+              </div>
             </div>
 
             <aside className="rounded-2xl border border-border bg-white p-6 shadow-xl shadow-primary/5 md:p-7">
@@ -179,25 +236,27 @@ export default async function ProductPage({
           <div className="max-w-3xl">
             <section>
               <p className="text-sm font-bold uppercase tracking-[0.16em] text-primary">
-                The problem
+                Search intent: the need
               </p>
               <h2 className="mt-4 text-3xl font-black tracking-[-0.04em] md:text-4xl">
-                What {product.name} addresses
+                What problem does {product.name} solve?
               </h2>
               <p className="mt-6 text-lg leading-8 text-foreground/75">
                 {product.problem}
               </p>
             </section>
 
-            <section className="mt-16 rounded-3xl bg-foreground p-7 text-background md:p-10">
-              <p className="text-sm font-bold uppercase tracking-[0.16em] text-accent">
-                What stands out
+            <section className="mt-16">
+              <p className="text-sm font-bold uppercase tracking-[0.16em] text-primary">
+                Fit
               </p>
-              <h2 className="mt-4 text-3xl font-black tracking-[-0.04em]">
-                What makes {product.name} different
+              <h2 className="mt-4 text-3xl font-black tracking-[-0.04em] md:text-4xl">
+                Who is {product.name} for?
               </h2>
-              <p className="mt-6 text-lg leading-8 text-background/70">
-                {product.differentiator}
+              <p className="mt-6 text-lg leading-8 text-foreground/75">
+                {product.name} is designed for {product.audience}. The strongest
+                fit is a user dealing with the problem described above and
+                looking for the outcome in {cleanSentence(product.promise)}
               </p>
             </section>
 
@@ -207,7 +266,7 @@ export default async function ProductPage({
                   Use cases
                 </p>
                 <h2 className="mt-4 text-3xl font-black tracking-[-0.04em] md:text-4xl">
-                  What you can use {product.name} for
+                  What can you do with {product.name}?
                 </h2>
                 <div className="mt-8 grid gap-5 md:grid-cols-2">
                   {useCases.map((useCase) => (
@@ -224,13 +283,25 @@ export default async function ProductPage({
               </section>
             ) : null}
 
+            <section className="mt-16 rounded-3xl bg-foreground p-7 text-background md:p-10">
+              <p className="text-sm font-bold uppercase tracking-[0.16em] text-accent">
+                Approach
+              </p>
+              <h2 className="mt-4 text-3xl font-black tracking-[-0.04em]">
+                How does {product.name} approach the problem?
+              </h2>
+              <p className="mt-6 text-lg leading-8 text-background/70">
+                {product.differentiator}
+              </p>
+            </section>
+
             {outcomes.length ? (
               <section className="mt-16">
                 <p className="text-sm font-bold uppercase tracking-[0.16em] text-primary">
                   Outcomes
                 </p>
                 <h2 className="mt-4 text-3xl font-black tracking-[-0.04em] md:text-4xl">
-                  What to pay attention to with {product.name}
+                  What should you pay attention to when using {product.name}?
                 </h2>
                 <ul className="mt-8 grid gap-4 md:grid-cols-2">
                   {outcomes.map((outcome) => (
@@ -250,17 +321,34 @@ export default async function ProductPage({
           <aside className="space-y-8 lg:sticky lg:top-8 lg:self-start">
             <div className="rounded-2xl border border-border bg-white p-6">
               <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-primary">
-                Who it is for
+                At a glance
               </h2>
-              <p className="mt-4 text-sm leading-6 text-foreground/75">
-                {product.audience}
-              </p>
+              <dl className="mt-5 space-y-5 text-sm leading-6">
+                <div>
+                  <dt className="font-bold text-foreground">Category</dt>
+                  <dd className="mt-1 text-muted-foreground">{product.category}</dd>
+                </div>
+                <div>
+                  <dt className="font-bold text-foreground">Designed for</dt>
+                  <dd className="mt-1 text-muted-foreground">{product.audience}</dd>
+                </div>
+                <div>
+                  <dt className="font-bold text-foreground">Core outcome</dt>
+                  <dd className="mt-1 text-muted-foreground">{product.promise}</dd>
+                </div>
+                {useCases[0] ? (
+                  <div>
+                    <dt className="font-bold text-foreground">Example use</dt>
+                    <dd className="mt-1 text-muted-foreground">{useCases[0]}</dd>
+                  </div>
+                ) : null}
+              </dl>
             </div>
 
             {relatedSearches.length ? (
               <div className="rounded-2xl border border-border bg-muted/50 p-6">
                 <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-foreground">
-                  Explore this need
+                  Related searches
                 </h2>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {relatedSearches.map((keyword) => (
