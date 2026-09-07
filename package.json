@@ -17,6 +17,7 @@
     "deploy:worker": "npm run build && npm run db:migrate:remote && wrangler deploy --config wrangler.jsonc",
     "db:migrate:local": "wrangler d1 migrations apply magic-catalog --local --config wrangler.jsonc",
     "db:migrate:remote": "wrangler d1 migrations apply magic-catalog --remote --config wrangler.jsonc",
+    "scale:setup": "node scripts/setup-scale.mjs",
     "vector:reindex": "node scripts/reindex.mjs",
     "diagnose": "node scripts/diagnose.mjs",
     "logs": "wrangler tail magic-catalog --format pretty --config wrangler.jsonc",
