@@ -45,23 +45,24 @@ test("renders an indexable product page without generic SEO filler", async () =>
     context,
   );
   const html = await response.text();
+  const visibleHtml = html.replace(/<!--.*?-->/g, "");
   assert.equal(response.status, 200);
-  assert.match(html, /Invoice Rescue/);
-  assert.match(html, /Follow Invoice Rescue/);
-  assert.match(html, /What Invoice Rescue addresses/);
-  assert.match(html, /What makes Invoice Rescue different/);
-  assert.match(html, /What you can use Invoice Rescue for/);
+  assert.match(visibleHtml, /Invoice Rescue/);
+  assert.match(visibleHtml, /Follow Invoice Rescue/);
+  assert.match(visibleHtml, /What Invoice Rescue addresses/);
+  assert.match(visibleHtml, /What makes Invoice Rescue different/);
+  assert.match(visibleHtml, /What you can use Invoice Rescue for/);
   assert.match(html, /application\/ld\+json/);
   assert.doesNotMatch(
-    html,
+    visibleHtml,
     /transparent concept|not a launched service|created from a catalog search|initial concept/i,
   );
   assert.doesNotMatch(
-    html,
+    visibleHtml,
     /buying guide|how to evaluate products|what should i ask during a trial or demo|what are common alternatives to|can products in .* replace a manual process/i,
   );
   assert.doesNotMatch(
-    html,
+    visibleHtml,
     /the operational gap|why the current workflow breaks|practical rollout|how to introduce a better workflow/i,
   );
 });
