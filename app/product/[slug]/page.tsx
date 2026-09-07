@@ -30,7 +30,32 @@ type PageProps = {
 };
 
 function descriptionFor(product: NonNullable<Awaited<ReturnType<typeof getProductBySlug>>>) {
-  return (product.promise + " Built for " + product.audience + ".").slice(0, 158);
+  return (
+    "Explore " +
+    product.name +
+    ", a product in " +
+    product.category +
+    " for " +
+    product.audience +
+    ". " +
+    product.promise
+  ).slice(0, 158);
+}
+
+function cleanSentence(value: string) {
+  const clean = value.trim();
+  if (!clean) return "";
+  return /[.!?]$/.test(clean) ? clean : clean + ".";
+}
+
+function naturalList(values: string[]) {
+  const clean = values
+    .map((value) => value.trim().replace(/[.!?]+$/, ""))
+    .filter(Boolean);
+  if (!clean.length) return "";
+  if (clean.length === 1) return clean[0];
+  if (clean.length === 2) return clean[0] + " and " + clean[1];
+  return clean.slice(0, -1).join(", ") + ", and " + clean[clean.length - 1];
 }
 
 export async function generateMetadata({
@@ -40,7 +65,7 @@ export async function generateMetadata({
   if (!product) return { title: "Product not found" };
   const canonical = "/product/" + product.slug;
   return {
-    title: product.name,
+    title: product.name + " | " + product.category,
     description: descriptionFor(product),
     alternates: { canonical },
     robots: { index: true, follow: true },
@@ -64,25 +89,28 @@ export default async function ProductPage({
     .filter((result) => result.slug !== product.slug)
     .slice(0, 3);
   const runtime = getRuntimeEnv();
+  const useCases = product.workflow.map((item) => item.trim()).filter(Boolean).slice(0, 6);
+  const evaluationSignals = product.metrics
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 6);
+  const relatedSearches = product.keywords
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 8);
+  const useCaseSummary = naturalList(useCases);
+  const signalSummary = naturalList(evaluationSignals);
   const faqs = [
     {
       question: "What is " + product.name + "?",
       answer:
         product.name +
-        " is focused software for " +
+        " is a product in " +
+        product.category +
+        " designed for " +
         product.audience +
         ". " +
-        product.promise,
-    },
-    {
-      question: "What problem does it solve?",
-      answer: product.problem + " " + product.differentiator,
-    },
-    {
-      question: "How does the workflow work?",
-      answer: product.workflow
-        .map((step, index) => String(index + 1) + ". " + step)
-        .join(" "),
+        cleanSentence(product.promise),
     },
     {
       question: "Who is " + product.name + " for?",
@@ -90,11 +118,76 @@ export default async function ProductPage({
         product.name +
         " is designed for " +
         product.audience +
-        ". Subscribe for feature updates and related resources.",
+        ". It is especially relevant when " +
+        product.problem.charAt(0).toLowerCase() +
+        product.problem.slice(1),
     },
     {
-      question: "What outcomes can teams track?",
-      answer: product.metrics.join(", ") + ".",
+      question: "What problem does " + product.name + " help solve?",
+      answer: cleanSentence(product.problem) + " " + cleanSentence(product.promise),
+    },
+    {
+      question: "What can I use " + product.name + " for?",
+      answer: useCaseSummary
+        ? "Common ways to use " + product.name + " include " + useCaseSummary + "."
+        : cleanSentence(product.promise),
+    },
+    {
+      question:
+        "How is " + product.name + " different from other " + product.category + " options?",
+      answer: cleanSentence(product.differentiator),
+    },
+    {
+      question: "How do I know if " + product.name + " is a good fit?",
+      answer:
+        "Start with the problem you need to solve and who will use the product. " +
+        "For " +
+        product.name +
+        ", the intended audience is " +
+        product.audience +
+        ". Compare that fit with the core promise: " +
+        cleanSentence(product.promise),
+    },
+    {
+      question: "What should I compare when choosing " + product.category + " tools?",
+      answer:
+        "Compare how well each option fits the main use case, how easy it is to adopt, " +
+        "the quality of its core experience, compatibility with the tools or devices you already use, " +
+        "pricing and limits, support, and any privacy or security requirements that matter to you.",
+    },
+    {
+      question: "What should I check before adopting a product in " + product.category + "?",
+      answer:
+        "Verify the features you actually need, current pricing and usage limits, supported platforms or integrations, " +
+        "data handling, export options, support, and any constraints that could matter at your expected level of use. " +
+        "Testing the primary use case end to end is usually more useful than comparing feature counts alone.",
+    },
+    {
+      question: "What results should I track after using " + product.name + "?",
+      answer: signalSummary
+        ? "Useful signals may include " + signalSummary + ". Choose the measures that best match your actual goal."
+        : "Track the outcome that motivated the purchase, along with adoption, time saved, quality, reliability, and user satisfaction where relevant.",
+    },
+    {
+      question: "What are common alternatives to " + product.name + "?",
+      answer:
+        "Depending on the need, alternatives can include other products in " +
+        product.category +
+        ", broader general-purpose tools, a manual process, or an internal solution. " +
+        "The best comparison is the one that solves the same core problem for the same users.",
+    },
+    {
+      question: "Can products in " + product.category + " replace a manual process?",
+      answer:
+        "Sometimes, but replacement is not always the right goal. A product can also reduce repetitive work, organize information, " +
+        "improve consistency, or handle one part of a process while people keep control of decisions that need judgment.",
+    },
+    {
+      question: "What should I ask during a trial or demo?",
+      answer:
+        "Ask whether the product handles your most common real-world case, what happens at edge cases or higher usage, " +
+        "how data can be imported and exported, which integrations or platforms are supported, what the full cost is, " +
+        "and how easy it is for the intended users to get value without extra work.",
     },
   ];
   const structuredData = {
@@ -105,6 +198,7 @@ export default async function ProductPage({
         name: product.name,
         description: descriptionFor(product),
         category: product.category,
+        keywords: product.keywords.join(", "),
         audience: {
           "@type": "Audience",
           audienceType: product.audience,
@@ -214,57 +308,54 @@ export default async function ProductPage({
           <div className="max-w-3xl">
             <section>
               <p className="text-sm font-bold uppercase tracking-[0.16em] text-primary">
-                The operational gap
+                Overview
               </p>
               <h2 className="mt-4 text-3xl font-black tracking-[-0.04em] md:text-4xl">
-                Why the current workflow breaks
+                What {product.name} is designed to help with
               </h2>
               <div className="mt-6 space-y-5 text-base leading-8 text-foreground/75 md:text-lg">
                 <p>{product.problem}</p>
+                <p>{product.promise}</p>
                 <p>
-                  For {product.audience}, the visible task is rarely the whole
-                  problem. The real cost comes from missing context, unclear
-                  ownership, late exceptions, and decisions that cannot be
-                  reconstructed later.
-                </p>
-                <p>
-                  {product.name} reduces that coordination burden by making
-                  evidence easier to collect, the next action easier to see,
-                  and the final outcome easier to learn from.
+                  The intended audience is {product.audience}. Whether it is a
+                  strong fit depends on the exact use case, constraints, and
+                  alternatives you are comparing.
                 </p>
               </div>
             </section>
 
-            <section className="mt-16">
-              <p className="text-sm font-bold uppercase tracking-[0.16em] text-primary">
-                How it works
-              </p>
-              <h2 className="mt-4 text-3xl font-black tracking-[-0.04em] md:text-4xl">
-                From scattered context to a clear decision
-              </h2>
-              <ol className="mt-8 space-y-5">
-                {product.workflow.map((step, index) => (
-                  <li
-                    key={step}
-                    className="grid grid-cols-[44px_1fr] gap-4 rounded-2xl border border-border bg-white p-5 md:p-6"
-                  >
-                    <span className="flex size-11 items-center justify-center rounded-full bg-primary font-black text-primary-foreground">
-                      {index + 1}
-                    </span>
-                    <p className="pt-1 text-base font-medium leading-7 text-foreground/80">
-                      {step}
-                    </p>
-                  </li>
-                ))}
-              </ol>
-            </section>
+            {useCases.length ? (
+              <section className="mt-16">
+                <p className="text-sm font-bold uppercase tracking-[0.16em] text-primary">
+                  Common uses
+                </p>
+                <h2 className="mt-4 text-3xl font-black tracking-[-0.04em] md:text-4xl">
+                  Ways to use {product.name}
+                </h2>
+                <div className="mt-8 grid gap-5 md:grid-cols-2">
+                  {useCases.map((useCase, index) => (
+                    <div
+                      key={useCase}
+                      className="rounded-2xl border border-border bg-white p-5 md:p-6"
+                    >
+                      <span className="text-xs font-black uppercase tracking-[0.14em] text-primary">
+                        Use {index + 1}
+                      </span>
+                      <p className="mt-3 text-base font-medium leading-7 text-foreground/80">
+                        {useCase}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
 
             <section className="mt-16 rounded-3xl bg-foreground p-7 text-background md:p-10">
               <p className="text-sm font-bold uppercase tracking-[0.16em] text-accent">
-                The sharper angle
+                What stands out
               </p>
               <h2 className="mt-4 text-3xl font-black tracking-[-0.04em]">
-                What makes it different
+                How {product.name} is positioned differently
               </h2>
               <p className="mt-6 text-lg leading-8 text-background/70">
                 {product.differentiator}
@@ -273,34 +364,36 @@ export default async function ProductPage({
 
             <section className="mt-16">
               <p className="text-sm font-bold uppercase tracking-[0.16em] text-primary">
-                Practical rollout
+                Buying guide
               </p>
               <h2 className="mt-4 text-3xl font-black tracking-[-0.04em] md:text-4xl">
-                How to introduce a better workflow
+                How to evaluate products in {product.category}
               </h2>
               <div className="mt-7 space-y-6 text-base leading-8 text-foreground/75">
                 <div>
-                  <h3 className="font-bold text-foreground">Start with one repeatable case</h3>
+                  <h3 className="font-bold text-foreground">Start with the real use case</h3>
                   <p>
-                    Choose a frequent, bounded version of the problem and agree
-                    on what a good outcome looks like. This keeps the first
-                    workflow understandable for everyone involved.
+                    Define the job you need done, who will use the product, and
+                    what a good outcome looks like. A long feature list matters
+                    less if the core experience does not match that need.
                   </p>
                 </div>
                 <div>
-                  <h3 className="font-bold text-foreground">Connect only useful evidence</h3>
+                  <h3 className="font-bold text-foreground">Test the important path end to end</h3>
                   <p>
-                    Use the smallest set of source records needed to make a
-                    better next action visible. Preserve provenance, access
-                    boundaries, and the original context behind each record.
+                    Try the most common real-world case instead of only viewing
+                    screenshots or feature tables. Check setup effort, everyday
+                    usability, edge cases, and how easily you can get your data
+                    in and out when those details matter.
                   </p>
                 </div>
                 <div>
-                  <h3 className="font-bold text-foreground">Keep the decision boundary explicit</h3>
+                  <h3 className="font-bold text-foreground">Compare the constraints, not just features</h3>
                   <p>
-                    Decide which steps can be automated safely and which require
-                    a named human reviewer. A clear boundary is part of the
-                    operating process, especially for consequential decisions.
+                    Verify current pricing and limits, supported platforms and
+                    integrations, support, privacy or security requirements, and
+                    anything else that could become a blocker at your expected
+                    level of use.
                   </p>
                 </div>
               </div>
@@ -311,7 +404,7 @@ export default async function ProductPage({
                 Frequently asked
               </p>
               <h2 className="mt-4 text-3xl font-black tracking-[-0.04em] md:text-4xl">
-                Questions about {product.name}
+                Questions about {product.name} and {product.category}
               </h2>
               <Accordion type="single" collapsible className="mt-7">
                 {faqs.map((faq, index) => (
@@ -331,32 +424,47 @@ export default async function ProductPage({
           <aside className="space-y-8 lg:sticky lg:top-8 lg:self-start">
             <div className="rounded-2xl border border-border bg-white p-6">
               <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-primary">
-                Success signals
+                Designed for
               </h2>
-              <ul className="mt-5 space-y-4">
-                {product.metrics.map((metric) => (
-                  <li key={metric} className="flex items-start gap-3 text-sm leading-6">
-                    <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-primary" />
-                    <span>{metric}</span>
-                  </li>
-                ))}
-              </ul>
+              <p className="mt-4 text-sm leading-6 text-foreground/75">
+                {product.audience}
+              </p>
             </div>
-            <div className="rounded-2xl border border-border bg-muted/50 p-6">
-              <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-foreground">
-                Search themes
-              </h2>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {product.keywords.slice(0, 8).map((keyword) => (
-                  <span
-                    key={keyword}
-                    className="rounded-full border border-border bg-white px-3 py-1.5 text-xs text-muted-foreground"
-                  >
-                    {keyword}
-                  </span>
-                ))}
+
+            {evaluationSignals.length ? (
+              <div className="rounded-2xl border border-border bg-white p-6">
+                <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-primary">
+                  Things worth measuring
+                </h2>
+                <ul className="mt-5 space-y-4">
+                  {evaluationSignals.map((signal) => (
+                    <li key={signal} className="flex items-start gap-3 text-sm leading-6">
+                      <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-primary" />
+                      <span>{signal}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
-            </div>
+            ) : null}
+
+            {relatedSearches.length ? (
+              <div className="rounded-2xl border border-border bg-muted/50 p-6">
+                <h2 className="text-sm font-bold uppercase tracking-[0.14em] text-foreground">
+                  Related searches
+                </h2>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {relatedSearches.map((keyword) => (
+                    <Link
+                      key={keyword}
+                      href={"/search?q=" + encodeURIComponent(keyword)}
+                      className="rounded-full border border-border bg-white px-3 py-1.5 text-xs text-muted-foreground transition hover:border-primary/30 hover:text-primary"
+                    >
+                      {keyword}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </aside>
         </div>
       </article>
@@ -391,7 +499,7 @@ export default async function ProductPage({
       ) : null}
 
       <footer className="border-t border-border px-5 py-8 text-center text-xs text-muted-foreground md:px-8">
-        Last updated {new Date(product.createdAt).toISOString().slice(0, 10)}.
+        Catalog listing date {new Date(product.createdAt).toISOString().slice(0, 10)}.
       </footer>
     </main>
   );
