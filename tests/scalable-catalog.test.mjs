@@ -156,10 +156,11 @@ test("R2-backed products can be read without the legacy D1 products table", asyn
   }
 });
 
-test("ingest preflight, free request cap, and actual write totals", async () => {
+test("ingest preflight, optional page fields, free request cap, and actual write totals", async () => {
   const { setRuntimeEnv } = await vite.ssrLoadModule('/lib/runtime.ts');
   const { GET, POST } = await vite.ssrLoadModule('/app/api/admin/catalog/ingest/route.ts');
   let writes = 0;
+  let storedProduct;
   const db = { prepare() { return { bind() { return {
     async run() { writes += 3; return { success: true, meta: { rows_written: 3 } }; },
     async first() { return { id: 1 }; },
@@ -167,10 +168,9 @@ test("ingest preflight, free request cap, and actual write totals", async () => 
   const product = {
     slug:'sample-product',name:'Sample Product',category:'Accounting',audience:'Freelance businesses',
     problem:'Following up on invoices consumes time.',promise:'Keep collection tasks organized.',
-    differentiator:'A focused queue tracks outstanding balances.',workflow:['Import invoices'],
-    keywords:['billing'],metrics:['Open balances'],intentKey:'invoice-operations',
+    differentiator:'A focused queue tracks outstanding balances.',keywords:['billing'],intentKey:'invoice-operations',
   };
-  setRuntimeEnv({ DB:db, SEARCH_DB_0:db, PRODUCT_BODIES:{ async put() {} },ADMIN_REINDEX_TOKEN:'test' });
+  setRuntimeEnv({ DB:db, SEARCH_DB_0:db, PRODUCT_BODIES:{ async put(_key,value) { storedProduct=JSON.parse(value); } },ADMIN_REINDEX_TOKEN:'test' });
   const request = body => new Request('https://catalog.example/api/admin/catalog/ingest',{
     method:'POST',headers:{authorization:'Bearer test','content-type':'application/json'},body:JSON.stringify(body),
   });
@@ -191,6 +191,8 @@ test("ingest preflight, free request cap, and actual write totals", async () => 
     const payload = await result.json();
     assert.equal(payload.usage.rowsWritten,12); // intent + metadata + FTS delete + FTS insert
     assert.equal(payload.written[0].slug,product.slug);
+    assert.deepEqual(storedProduct.workflow,[]);
+    assert.deepEqual(storedProduct.metrics,[]);
   } finally { setRuntimeEnv({}); }
 });
 
