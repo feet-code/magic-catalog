@@ -26,10 +26,11 @@ test("renders the search-first catalog homepage", async () => {
     context,
   );
   const html = await response.text();
+  const visibleHtml = html.replace(/<!--.*?-->/g, "");
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   assert.match(html, /Describe what you need\. Find the right product/);
-  assert.match(html, /Browse all 100 products/);
+  assert.match(visibleHtml, /Browse all 100 product pages/);
   assert.doesNotMatch(html, /transparent product concept|deserves to be built/i);
   assert.match(html, /overdue-invoice-rescue/);
 });
