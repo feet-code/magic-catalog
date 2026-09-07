@@ -1,28 +1,53 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const CONFIG_URL = new URL("../wrangler.jsonc", import.meta.url);
+const WRANGLER_BIN = fileURLToPath(new URL("../node_modules/wrangler/bin/wrangler.js", import.meta.url));
 const R2_BUCKET = "magic-catalog-product-bodies";
 const INTENT_INDEX = "magic-catalog-intents";
 const SHARD_COUNT = 8;
 const SHARD_PREFIX = "magic-catalog-search-";
-const npx = process.platform === "win32" ? "npx.cmd" : "npx";
+
+function formatCommand(args) {
+  return `wrangler ${args.join(" ")}`;
+}
 
 function run(args, { quiet = false, allowFailure = false } = {}) {
-  const result = spawnSync(npx, ["wrangler", ...args], {
+  if (!existsSync(WRANGLER_BIN)) {
+    throw new Error(
+      `Local Wrangler executable was not found at ${WRANGLER_BIN}. Run npm install, then retry npm run scale:setup.`,
+    );
+  }
+
+  const command = formatCommand(args);
+  const result = spawnSync(process.execPath, [WRANGLER_BIN, ...args], {
     cwd: ROOT,
     env: process.env,
     encoding: "utf8",
     shell: false,
+    windowsHide: true,
   });
   const output = `${result.stdout || ""}${result.stderr || ""}`;
   if (!quiet && output.trim()) process.stdout.write(output.endsWith("\n") ? output : `${output}\n`);
-  if (result.error) throw result.error;
+
+  if (result.error) {
+    const details = [
+      `${command} could not start: ${result.error.message}`,
+      `Node: ${process.execPath}`,
+      `Wrangler: ${WRANGLER_BIN}`,
+      `cwd: ${ROOT}`,
+      `platform: ${process.platform} ${process.arch}`,
+    ];
+    if (output.trim()) details.push(output.trim());
+    throw new Error(details.join("\n"));
+  }
+
   if (result.status !== 0 && !allowFailure) {
-    throw new Error(`wrangler ${args.join(" ")} failed with exit ${result.status}.\n${output}`);
+    throw new Error(`${command} failed with exit ${result.status}.\n${output}`);
   }
   return { status: result.status ?? 1, output, stdout: result.stdout || "" };
 }
