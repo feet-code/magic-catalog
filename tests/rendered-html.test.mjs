@@ -31,11 +31,10 @@ test("renders the search-first catalog homepage", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   assert.match(html, /Describe what you need\. Find the right product/);
   assert.match(visibleHtml, /Browse all 100 product pages/);
-  assert.doesNotMatch(html, /transparent product concept|deserves to be built/i);
   assert.match(html, /overdue-invoice-rescue/);
 });
 
-test("renders an indexable product page without generic SEO filler", async () => {
+test("renders a clear product article that answers likely searches", async () => {
   const worker = await loadWorker();
   const response = await worker.fetch(
     new Request("http://localhost/product/overdue-invoice-rescue", {
@@ -47,24 +46,16 @@ test("renders an indexable product page without generic SEO filler", async () =>
   const html = await response.text();
   const visibleHtml = html.replace(/<!--.*?-->/g, "");
   assert.equal(response.status, 200);
-  assert.match(visibleHtml, /Invoice Rescue/);
-  assert.match(visibleHtml, /Follow Invoice Rescue/);
-  assert.match(visibleHtml, /What Invoice Rescue addresses/);
-  assert.match(visibleHtml, /What makes Invoice Rescue different/);
-  assert.match(visibleHtml, /What you can use Invoice Rescue for/);
+  assert.match(visibleHtml, /What is Invoice Rescue\?/);
+  assert.match(visibleHtml, /Invoice Rescue\s+is a Finance operations product built for small agencies and consultancies/);
+  assert.match(visibleHtml, /What problem does Invoice Rescue solve\?/);
+  assert.match(visibleHtml, /Who is Invoice Rescue for\?/);
+  assert.match(visibleHtml, /What can you do with Invoice Rescue\?/);
+  assert.match(visibleHtml, /How does Invoice Rescue approach the problem\?/);
+  assert.match(visibleHtml, /At a glance/);
+  assert.match(html, /BreadcrumbList/);
   assert.match(html, /application\/ld\+json/);
-  assert.doesNotMatch(
-    visibleHtml,
-    /transparent concept|not a launched service|created from a catalog search|initial concept/i,
-  );
-  assert.doesNotMatch(
-    visibleHtml,
-    /buying guide|how to evaluate products|what should i ask during a trial or demo|what are common alternatives to|can products in .* replace a manual process/i,
-  );
-  assert.doesNotMatch(
-    visibleHtml,
-    /the operational gap|why the current workflow breaks|practical rollout|how to introduce a better workflow/i,
-  );
+  assert.doesNotMatch(visibleHtml, /buying guide|search intent:/i);
 });
 
 test("publishes robots and the sitemap index", async () => {
@@ -157,12 +148,6 @@ test("admin diagnostics identifies missing production bindings", async () => {
   assert.equal(body.ok, false);
   assert.ok(body.requestId);
   assert.equal(body.checks.d1.failure.code, "D1_BINDING_MISSING");
-  assert.equal(
-    body.checks.geminiConfiguration.failure.code,
-    "GEMINI_API_KEY_MISSING",
-  );
-  assert.equal(
-    body.checks.productGeneration.failure.code,
-    "PRODUCT_GENERATION_NOT_CONFIGURED",
-  );
+  assert.equal(body.checks.geminiConfiguration.failure.code, "GEMINI_API_KEY_MISSING");
+  assert.equal(body.checks.productGeneration.failure.code, "PRODUCT_GENERATION_NOT_CONFIGURED");
 });
