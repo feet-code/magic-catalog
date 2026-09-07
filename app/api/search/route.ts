@@ -11,7 +11,9 @@ import {
   requestIdFor,
 } from "../../../lib/diagnostics";
 import { generateAndSaveProduct } from "../../../lib/generation";
+import { semanticIntentSearch } from "../../../lib/intent-search";
 import type { ProductSearchResult } from "../../../lib/product-types";
+import { searchScalableCatalog } from "../../../lib/scalable-catalog";
 import { consumeRateLimit, verifyTurnstile } from "../../../lib/security";
 
 export const dynamic = "force-dynamic";
@@ -60,29 +62,43 @@ export async function POST(request: Request) {
     }
 
     let semantic: ProductSearchResult[] | null = null;
+    let intents = null;
     try {
-      semantic = await semanticSearch(payload.query, 8);
+      [semantic, intents] = await Promise.all([
+        semanticSearch(payload.query, 8),
+        semanticIntentSearch(payload.query, 6),
+      ]);
     } catch (error) {
       logRuntimeEvent("warn", "semantic_search_failed", {
         requestId,
         failure: diagnosticDetails(error),
       });
       semantic = null;
+      intents = null;
     }
-    const [dynamicResults] = await Promise.all([
+
+    const [dynamicResults, scalableResults] = await Promise.all([
       searchGeneratedCatalog(payload.query, 8),
+      searchScalableCatalog(payload.query, intents ?? [], 8),
     ]);
     const lexical = mergeResults([
       searchSeedCatalog(payload.query, 8),
       dynamicResults,
+      scalableResults,
     ]);
     const results = mergeResults([semantic ?? [], lexical]);
     const bestScore = results[0]?.score ?? 0;
-    const threshold = semantic ? 0.72 : 0.42;
+    const hasScalableMatch = scalableResults.length > 0;
+    const threshold = hasScalableMatch ? 0.62 : semantic ? 0.72 : 0.42;
 
     if (bestScore >= threshold) {
       return jsonResponse(
-        { mode: "matches", generated: false, results },
+        {
+          mode: "matches",
+          generated: false,
+          results,
+          retrieval: hasScalableMatch ? "intent_fts" : semantic ? "semantic_lexical" : "lexical",
+        },
         requestId,
       );
     }

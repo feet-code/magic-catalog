@@ -25,10 +25,36 @@ export interface VectorIndexBinding {
   ): Promise<unknown>;
 }
 
+export interface R2ObjectBodyBinding {
+  text(): Promise<string>;
+}
+
+export interface R2BucketBinding {
+  get(key: string): Promise<R2ObjectBodyBinding | null>;
+  put(
+    key: string,
+    value: string,
+    options?: {
+      httpMetadata?: { contentType?: string };
+      customMetadata?: Record<string, string>;
+    },
+  ): Promise<unknown>;
+}
+
 export interface MagicCatalogEnv {
   DB?: D1Database;
   AI?: AiBinding;
   PRODUCT_INDEX?: VectorIndexBinding;
+  INTENT_INDEX?: VectorIndexBinding;
+  PRODUCT_BODIES?: R2BucketBinding;
+  SEARCH_DB_0?: D1Database;
+  SEARCH_DB_1?: D1Database;
+  SEARCH_DB_2?: D1Database;
+  SEARCH_DB_3?: D1Database;
+  SEARCH_DB_4?: D1Database;
+  SEARCH_DB_5?: D1Database;
+  SEARCH_DB_6?: D1Database;
+  SEARCH_DB_7?: D1Database;
   SITE_URL?: string;
   GSC_VERIFICATION_TOKEN?: string;
   POSTHOG_PROJECT_API_KEY?: string;
@@ -54,6 +80,20 @@ export function getRuntimeEnv(): MagicCatalogEnv {
     return globalThis.__MAGIC_CATALOG_ENV__;
   }
   return process.env as unknown as MagicCatalogEnv;
+}
+
+export function getSearchShards() {
+  const runtime = getRuntimeEnv();
+  return [
+    runtime.SEARCH_DB_0,
+    runtime.SEARCH_DB_1,
+    runtime.SEARCH_DB_2,
+    runtime.SEARCH_DB_3,
+    runtime.SEARCH_DB_4,
+    runtime.SEARCH_DB_5,
+    runtime.SEARCH_DB_6,
+    runtime.SEARCH_DB_7,
+  ].filter((binding): binding is D1Database => Boolean(binding));
 }
 
 const DEFAULT_SITE_URL = "https://magic-catalog.cloudwebsites.workers.dev";

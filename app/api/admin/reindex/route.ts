@@ -8,9 +8,11 @@ import {
   logRuntimeEvent,
   requestIdFor,
 } from "../../../../lib/diagnostics";
+import { upsertIntentVectors } from "../../../../lib/intent-search";
+import type { Product } from "../../../../lib/product-types";
+import { listIntentClusters } from "../../../../lib/scalable-catalog";
 import { seedProducts } from "../../../../lib/seed-products";
 import { getRuntimeEnv } from "../../../../lib/runtime";
-import type { Product } from "../../../../lib/product-types";
 
 export const dynamic = "force-dynamic";
 
@@ -82,7 +84,7 @@ export async function POST(request: Request) {
     });
     return Response.json(
       {
-        error: "Vector indexing failed before all products were processed.",
+        error: "Vector indexing failed before all legacy products were processed.",
         indexed,
         total: all.length,
         debugId: requestId,
@@ -90,9 +92,40 @@ export async function POST(request: Request) {
       { status: 503, headers },
     );
   }
+
+  let intentIndexed = 0;
+  const intents = await listIntentClusters();
+  if (runtime.INTENT_INDEX && intents.length) {
+    try {
+      for (let cursor = 0; cursor < intents.length; cursor += 20) {
+        const batch = intents.slice(cursor, cursor + 20);
+        await upsertIntentVectors(batch);
+        intentIndexed += batch.length;
+      }
+    } catch (error) {
+      logRuntimeEvent("error", "intent_reindex_failed", {
+        requestId,
+        intentIndexed,
+        total: intents.length,
+        failure: diagnosticDetails(error),
+      });
+      return Response.json(
+        {
+          error: "Intent Vectorize indexing failed before all clusters were processed.",
+          indexed,
+          intentIndexed,
+          intentTotal: intents.length,
+          debugId: requestId,
+        },
+        { status: 503, headers },
+      );
+    }
+  }
+
   logRuntimeEvent("info", "reindex_succeeded", {
     requestId,
     indexed,
+    intentIndexed,
   });
-  return Response.json({ indexed, requestId }, { headers });
+  return Response.json({ indexed, intentIndexed, requestId }, { headers });
 }

@@ -1,231 +1,262 @@
 # Magic Catalog
 
-Magic Catalog is a one-domain catalog built to support a very large collection of focused software products.
+Magic Catalog is a one-domain software catalog designed to grow from a small seed collection to roughly one million dynamically rendered product pages without creating a million-file build.
 
-Visitors describe a problem or desired solution. The site returns the closest products using semantic and lexical retrieval. When no result is close enough, Gemini creates a tailored product record, saves it, indexes it, and returns it as the first result. Every product page has explanatory content, FAQs, structured data, related internal links, and a product-specific email signup.
-
-The repository starts with exactly 100 hand-curated niche product pages.
-
-## What is implemented
-
-- Problem-first search homepage and shareable no-index results pages
-- 100 server-rendered, indexable product pages
-- Gemini API generation with an ordered six-model fallback chain
-- Workers AI embeddings plus Vectorize semantic search
-- Indexed lexical fallback for generated products
-- D1 persistence for generated products, search terms, email signups, and abuse limits
-- Per-browser daily generation and signup limits
-- Optional Cloudflare Turnstile verification
-- PostHog events for page views, searches, generated products, product views, and email signups
-- Google Search Console verification metadata
-- Dynamic robots.txt, sitemap index, and 45,000-URL sitemap shards
-- Product and FAQ structured data
-- A protected endpoint for indexing the initial catalog in Vectorize
+Visitors describe a problem or desired solution. Search combines semantic routing and lexical retrieval. When there is no strong match, Gemini can still create a tailored product through the existing generation flow.
 
 ## Architecture
 
-The application is rendered by one Cloudflare Worker. The initial 100 products are bundled with the Worker, so they load even if D1 is unavailable. New Gemini-created products and email signups are stored in D1. Gemini is the only product generator. Workers AI supplies 384-dimensional embeddings for Vectorize but is not used to write product content. A compact indexed term table provides a no-AI fallback for generated products.
+The application runs as one Cloudflare Worker.
 
-Product pages are rendered by slug at request time, so adding hundreds of thousands of records does not create a million-file build. The sitemap routes split URLs into crawler-safe batches.
+### Existing / small catalog
 
-## Run locally
+The original path remains intact for backward compatibility:
+
+- 100 bundled seed products
+- D1 for generated products, signups, rate limits, and legacy lexical terms
+- Workers AI embeddings
+- the existing `PRODUCT_INDEX` Vectorize index for the small legacy catalog
+
+### Million-product catalog
+
+Large imported catalogs use a separate storage and retrieval path:
+
+- **R2 (`PRODUCT_BODIES`)** stores the full JSON body for every imported product.
+- **8 D1 search shards (`SEARCH_DB_0` through `SEARCH_DB_7`)** store compact metadata plus an FTS5 index.
+- Products are assigned to shards with a deterministic FNV-1a hash of the slug.
+- **Vectorize (`INTENT_INDEX`)** stores semantic intent clusters, not one vector per product.
+- A query is embedded once, Vectorize returns the closest intent clusters, and D1 FTS5 ranks products inside those clusters.
+- If the intent-filtered lookup finds nothing, search automatically retries FTS without the cluster filter.
+- `/product/<slug>` reads the full product body from R2 while preserving the existing public URL format.
+- Sitemap routes combine legacy D1 products and all scalable search shards.
+
+At 384 dimensions, 10,000 intent vectors use 3.84 million stored dimensions. This is the reason the scalable architecture does not create one Vectorize vector per product.
+
+## Initial setup
 
 Requirements: Node.js 22.13 or newer.
 
-~~~
+```bash
 npm ci
-~~~
+```
 
-Create `.dev.vars` from the example. On Windows Command Prompt use `copy .dev.vars.example .dev.vars`; on PowerShell use `Copy-Item .dev.vars.example .dev.vars`; on macOS/Linux use `cp .dev.vars.example .dev.vars`. Then set `GEMINI_API_KEY` and the two random secret values before running:
+Create `.dev.vars` from `.dev.vars.example`, then set the required secrets used by your existing deployment:
 
-~~~
+```text
+GEMINI_API_KEY=...
+RATE_LIMIT_SALT=...
+ADMIN_REINDEX_TOKEN=...
+```
+
+For local development:
+
+```bash
 npm run db:migrate:local
 npm run dev
-~~~
+```
 
-The catalog and lexical search work without an AI provider. For local on-demand generation, put a free Gemini API key in `GEMINI_API_KEY` inside `.dev.vars`. Workers AI embeddings and Vectorize are used after deployment.
+The local Vinext configuration includes an R2 binding for `PRODUCT_BODIES`. The eight production search shards are provisioned by the scale setup command below.
 
-Useful checks:
+## Deploy the existing catalog
 
-~~~
-npm run typecheck
-npm run build
-~~~
+The current primary D1 database is already configured in `wrangler.jsonc`.
 
-## Deploy to Cloudflare
+```bash
+npm run deploy
+```
 
-This setup uses Workers, D1, Workers AI, and Vectorize.
+`npm run deploy` builds the app, applies pending primary D1 migrations, deploys the Worker, and keeps the existing PostHog / Google Search Console automation.
 
-1. Authenticate and create the database.
+## One-time million-product setup
 
-~~~
+Before bulk-loading the large catalog, authenticate with Cloudflare if necessary:
+
+```bash
 npm run login:cloudflare
-npx wrangler d1 create magic-catalog
-~~~
+```
 
-Copy the returned database ID into wrangler.jsonc in place of REPLACE_WITH_D1_DATABASE_ID.
+Then run:
 
-2. Create the semantic-search index.
+```bash
+npm run scale:setup
+```
 
-~~~
-npx wrangler vectorize create magic-catalog-products --dimensions=384 --metric=cosine
-~~~
+That command is restart-safe and does the infrastructure work for you:
 
-3. `SITE_URL` already points to `https://magic-catalog.cloudwebsites.workers.dev`. Change it only if you attach a custom domain, then apply the schema.
+1. creates or reuses the `magic-catalog-product-bodies` R2 bucket;
+2. creates or reuses eight D1 databases named `magic-catalog-search-0` through `magic-catalog-search-7`;
+3. creates or reuses the 384-dimensional `magic-catalog-intents` Vectorize index;
+4. writes the real resource IDs/bindings into `wrangler.jsonc`;
+5. applies `db/search-shard.sql` to every search shard.
 
-~~~
-npm run db:migrate:remote
-~~~
+After it succeeds, deploy the updated bindings and primary migration:
 
-The migration is required for generated products, rate limiting, and email signups. Reindexing Vectorize does not create the D1 tables. Future `npm run deploy` commands apply pending migrations automatically before uploading the Worker.
+```bash
+npm run deploy
+```
 
-4. Add the Gemini API key and long random values for the two required operational secrets.
+You do not need to manually copy D1 IDs or create the FTS tables.
 
-~~~
-npx wrangler secret put GEMINI_API_KEY
-npx wrangler secret put RATE_LIMIT_SALT
-npx wrangler secret put ADMIN_REINDEX_TOKEN
-~~~
+## Bulk ingest API
 
-`GEMINI_MODELS` defaults to `gemini-3.8-flash,gemini-3.7-flash,gemini-3.6-flash,gemini-3.5-flash,gemini-3-flash,gemini-2.5-flash`. They are tried in that order, so an unavailable model, rate limit, or temporary failure falls through to the next Gemini model. Override the comma-separated value in `wrangler.jsonc` only if needed.
+The scalable catalog exposes an authenticated internal endpoint:
 
-5. Reuse the same monitoring variables as `seo-test`. Copy `.env.example` to the ignored `.env` file, then paste the values you already use there. Local Cloudflare authentication uses the Wrangler OAuth login above; an API token is only needed for CI or headless automation. `npm run deploy` loads `.env` automatically, and values already exported in the shell take precedence.
+```text
+POST /api/admin/catalog/ingest
+Authorization: Bearer <ADMIN_REINDEX_TOKEN>
+Content-Type: application/json
+```
 
-~~~text
+Each request accepts up to 25 products and up to 25 intent definitions. The Product Hunt scraper can call this endpoint directly after it has normalized/rebranded a product.
+
+Example payload shape:
+
+```json
+{
+  "intents": [
+    {
+      "key": "invoice-operations",
+      "label": "Invoice operations",
+      "searchText": "invoice follow-up accounts receivable overdue payments freelancer billing"
+    }
+  ],
+  "products": [
+    {
+      "slug": "invoice-followup-assistant",
+      "name": "Invoice Followup Assistant",
+      "category": "Accounts receivable",
+      "audience": "small businesses and freelancers",
+      "problem": "Teams lose time repeatedly checking and following up on overdue invoices.",
+      "promise": "Keep overdue invoice follow-up organized in one workflow.",
+      "differentiator": "Prioritizes the next account to review and preserves follow-up context.",
+      "workflow": ["Import open invoices", "Review prioritized accounts", "Track follow-ups"],
+      "keywords": ["invoice followup", "accounts receivable", "overdue invoice"],
+      "metrics": ["overdue invoices", "follow-up time"],
+      "intentKey": "invoice-operations"
+    }
+  ]
+}
+```
+
+Writes are retry-safe: R2 is written first, D1 metadata is upserted, and the FTS row is refreshed. A partially failed request can be sent again.
+
+## Search flow
+
+Large-catalog retrieval is:
+
+```text
+query
+  -> Workers AI 384d embedding
+  -> INTENT_INDEX (closest intent clusters)
+  -> FTS5 query across SEARCH_DB_0..7, filtered by those intents
+  -> merge/rank top products
+  -> unfiltered FTS fallback on a cluster miss
+  -> legacy semantic + lexical results are merged in
+```
+
+If the scale resources are not configured yet, the scalable path simply returns no results and the original catalog continues to work.
+
+## Product pages and SEO
+
+Product pages remain dynamic:
+
+```text
+/product/<slug>
+```
+
+The scalable page lookup reads `products/<slug>.json` from R2. No static million-page build is required.
+
+The sitemap index uses 44,900 dynamic product URLs per shard so it remains under search-engine sitemap URL limits. It includes both the original D1-generated products and the R2-backed scalable catalog.
+
+Search result pages remain no-index; product pages remain canonical and indexable.
+
+## Semantic intent maintenance
+
+Intent definitions are persisted in the primary D1 `intent_clusters` table. The ingest endpoint tries to index supplied intents immediately.
+
+If Vectorize was temporarily unavailable, repair/rebuild it with:
+
+```bash
+npm run vector:reindex
+```
+
+That command still rebuilds the small legacy product index and now also reindexes all stored intent clusters into `INTENT_INDEX`.
+
+## Free-tier operating constraints
+
+This architecture is designed around the Cloudflare Free allowances rather than pretending one million individual vectors fit for free.
+
+Important practical constraints:
+
+- 384-dimensional vectors should be reserved for intent clusters. Around 10,000 clusters consume about 3.84 million stored dimensions.
+- Free D1 databases have a 500 MB per-database ceiling, so large search data is split across eight shards.
+- Keep the primary D1 small; full imported product bodies belong in R2, not the primary database.
+- Cloudflare Free currently allows 100,000 D1 rows written per day. A new scalable product normally creates/updates one compact metadata row plus one FTS row. Do not try to load all one million products in a single day while staying free.
+- For a free-only bulk load, pace ingestion to roughly 40,000-45,000 new products/day or lower so there is headroom for normal application writes and retries.
+- R2 storage must also remain under its free storage allowance. Keep product JSON compact and do not store scraped images or large duplicated documents in each object.
+- Worker request and D1 read quotas still matter once traffic/crawling becomes large. At that point paying a small amount is preferable to degrading search quality solely to preserve a $0 bill.
+
+The Product Hunt scraper should therefore be restart-safe and rate-limited on both the source-scraping side and Magic Catalog ingest side.
+
+## Monitoring and diagnostics
+
+Useful commands:
+
+```bash
+npm run typecheck
+npm test
+npm run diagnose
+npm run logs
+```
+
+Production generation/search events are logged with request IDs. Existing PostHog and Google Search Console integration stays unchanged.
+
+The repository also includes GitHub Actions CI that runs:
+
+```text
+npm ci
+npm run typecheck
+npm test
+```
+
+on the main branch, automation branches, and pull requests.
+
+## Google Search Console
+
+The deployment script reuses the same Google service-account setup as `seo-test`.
+
+Typical local `.env` values:
+
+```text
 CLOUDFLARE_ACCOUNT_ID=...
-CLOUDFLARE_WORKERS_SUBDOMAIN=... # harmless here; retained for copy/paste parity
+CLOUDFLARE_WORKERS_SUBDOMAIN=...
 POSTHOG_PROJECT_ID=...
 POSTHOG_PROJECT_API_KEY=...
 POSTHOG_INGEST_HOST=https://us.i.posthog.com
 GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/service-account.json
-GOOGLE_SEARCH_CONSOLE_OWNER_EMAIL=you@example.com # optional human co-owner
-~~~
+GOOGLE_SEARCH_CONSOLE_OWNER_EMAIL=you@example.com
+```
 
-`POSTHOG_PROJECT_ID` is useful to the shared `seo-test` tooling but is not needed by PostHog's event-ingestion request. Magic Catalog uses the identically named `POSTHOG_PROJECT_API_KEY` and `POSTHOG_INGEST_HOST` values. Google credentials stay local; only the generated public verification token is installed in the Worker.
-
-Turnstile is optional. If enabled, both values must still be configured directly:
-
-~~~
-npx wrangler secret put TURNSTILE_SITE_KEY
-npx wrangler secret put TURNSTILE_SECRET_KEY
-~~~
-
-6. Deploy and configure monitoring.
-
-~~~
-npm run deploy
-~~~
-
-The deployment command uploads the shared PostHog values when present, uses the service account to obtain a Google META token, deploys the Worker, waits for the token to become public, verifies the exact URL-prefix property, adds it to Search Console, and submits `sitemap.xml`. Missing PostHog or Google variables leave that integration unchanged, so ordinary code-only deploys still work.
-
-7. Seed the semantic index after the first deployment. Put the same `ADMIN_REINDEX_TOKEN` value in an ignored `.dev.vars` file or your shell. The deployed URL is read from `wrangler.jsonc` automatically:
-
-~~~
-npm run vector:reindex
-~~~
-
-The endpoint first verifies that the D1 schema is ready, then indexes the 100 bundled products in batches and refreshes up to the 1,000 newest generated products. Newly generated products index themselves automatically.
-
-## Diagnose production
-
-The protected diagnostic checks D1, the Gemini model chain, Workers AI embeddings, and Vectorize independently. It generates a sample draft without saving a product.
-
-1. If it does not exist yet, copy `.dev.vars.example` to `.dev.vars`.
-2. Set `ADMIN_REINDEX_TOKEN` in `.dev.vars` to the same value uploaded with `wrangler secret put`.
-3. Run:
-
-~~~
-npm run diagnose
-~~~
-
-To diagnose the local dev server instead, leave it running and use:
-
-~~~
-npm run diagnose -- --url http://localhost:5173
-~~~
-
-Each failed check prints a stage, error code, and cause. Public search failures show a Debug ID without exposing internals. To watch structured production logs, start this command and then reproduce the search:
-
-~~~
-npm run logs
-~~~
-
-Find the matching Debug ID in the `product_generation_failed` event. Successful generations emit `product_generation_succeeded`; semantic-search and Vectorize failures are logged separately. Cloudflare's dashboard can also search retained Worker logs when observability is enabled.
-
-Product generation asks Gemini for schema-constrained JSON and validates the result before saving it. Each failed Gemini model attempt is logged before the next model is tried. Workers AI is used only for embeddings.
-
-## Google Search Console
-
-Enable the Google Site Verification API and Search Console API for the same service-account project used by `seo-test`, then set `GOOGLE_APPLICATION_CREDENTIALS` to that existing JSON key before `npm run deploy`. No expiring user OAuth grant is involved.
-
-The deploy command is idempotent: it reuses existing service-account ownership when available, optionally delegates ownership to `GOOGLE_SEARCH_CONSOLE_OWNER_EMAIL`, ensures the URL-prefix property is in GSC, and resubmits the sitemap. Once registered, Magic Catalog appears automatically in the existing Search Portfolio dashboard. Its `/product/<slug>` URLs appear as individual rows in the dashboard's **Product pages** view; pages with no GSC impressions or clicks yet are not returned by Google's performance API.
-
-The generated verification token is emitted as the standard `google-site-verification` meta tag. Search results pages and API routes are excluded from indexing; product pages are canonical and indexable.
-
-## PostHog
-
-Use the same `POSTHOG_PROJECT_API_KEY` and `POSTHOG_INGEST_HOST` as `seo-test` if all websites should appear in one PostHog project. The application forwards a small allowlisted event payload server-side and never includes the signup email in PostHog.
-
-Events:
-
-- page_viewed
-- search_submitted
-- search_results_returned
-- product_generated
-- product_viewed
-- email_signup
-
-Useful properties include product_slug, category, result_mode, result_count, and product_source.
-
-## Inspect email interest
-
-Email addresses are stored in D1 because they are needed for product updates. PostHog receives only an anonymous browser ID.
-
-~~~
-npx wrangler d1 execute magic-catalog --remote --command "SELECT product_slug, count(*) AS signups FROM signups GROUP BY product_slug ORDER BY signups DESC"
-~~~
-
-Treat the database as personal data: limit access, publish a privacy policy before broad promotion, and delete records when they are no longer needed.
-
-## Free-tier reality
-
-The initial catalog is designed to run inside Cloudflare's and Gemini's free allowances at modest traffic. Gemini free-tier quotas are project- and model-specific. Current Cloudflare documentation lists 100,000 Worker requests per day, 5 million D1 rows read per day, 100,000 D1 rows written per day, 500 MB per free D1 database, 10,000 free Workers AI neurons per day, and 5 million free stored Vectorize dimensions.
-
-At 384 dimensions, the free Vectorize storage allowance covers roughly 13,000 product vectors, not one million. One million fully generated product records plus their search index will also outgrow a single free D1 database. In other words:
-
-- The initial 100-page catalog can run free.
-- A low-traffic catalog can grow into the thousands for free.
-- A true one-million-page semantic catalog will require paid Vectorize or another retrieval tier and likely D1 sharding or compact object storage.
-
-The URL and rendering design already avoids a million-page static build. The storage and retrieval layer is isolated so it can be sharded without changing public product URLs.
-
-Official limits and pricing:
-
-- https://ai.google.dev/gemini-api/docs/pricing
-- https://ai.google.dev/gemini-api/docs/rate-limits
-- https://developers.cloudflare.com/workers/platform/limits/
-- https://developers.cloudflare.com/d1/platform/limits/
-- https://developers.cloudflare.com/d1/platform/pricing/
-- https://developers.cloudflare.com/workers-ai/platform/pricing/
-- https://developers.cloudflare.com/vectorize/platform/pricing/
-
-## Important safeguards
-
-- Search pages are no-index to avoid infinite crawl traps.
-- Product generation is limited to three new records per browser identity per UTC day.
-- The browser identity is a salted hash; the raw IP is not stored.
-- Generated schemas are validated before persistence.
-- The signup form includes a honeypot, deduplication, optional Turnstile, and a daily attempt limit.
-- The Vectorize reindex route is hidden behind ADMIN_REINDEX_TOKEN.
+`npm run deploy` installs the public Google verification token, verifies/adds the URL-prefix property, and submits `sitemap.xml` when Google credentials are configured.
 
 ## Main files
 
-- app/page.tsx — search-first homepage and catalog index
-- app/product/[slug]/page.tsx — SEO product-page renderer
-- app/api/search/route.ts — retrieval and generation flow
-- app/api/signup/route.ts — email capture
-- lib/seed-products.ts — the initial 100 products
-- lib/ai.ts — generation, embeddings, and semantic retrieval
-- db/schema.ts — D1 schema
-- drizzle/ — generated D1 migrations
-- wrangler.jsonc — direct Cloudflare deployment configuration
+- `app/api/search/route.ts` — combined scalable + legacy search flow
+- `app/api/admin/catalog/ingest/route.ts` — authenticated bulk ingest endpoint
+- `app/product/[slug]/page.tsx` — dynamic SEO product page renderer
+- `lib/scalable-catalog.ts` — R2 storage, deterministic sharding, FTS retrieval, intent registry
+- `lib/intent-search.ts` — semantic intent Vectorize routing
+- `lib/catalog-sitemap.ts` — combined legacy/scalable sitemap pagination
+- `db/search-shard.sql` — compact D1 + FTS5 search-shard schema
+- `scripts/setup-scale.mjs` — one-command R2/D1/Vectorize provisioning
+- `drizzle/0001_million_catalog.sql` — primary D1 intent-cluster registry
+- `wrangler.jsonc` — Worker bindings; scale setup adds the generated resource IDs
+
+## Safeguards
+
+- Search pages are no-index to avoid crawl traps.
+- Existing generated-product rate limits remain in place.
+- Signup rate limiting and optional Turnstile remain in place.
+- Bulk catalog ingest is protected by `ADMIN_REINDEX_TOKEN`.
+- R2 product JSON is not publicly exposed as a bucket; the Worker reads it through a binding.
+- Scale-resource failures fall back to the existing catalog rather than taking down search.
