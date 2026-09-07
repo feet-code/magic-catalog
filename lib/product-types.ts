@@ -1,4 +1,4 @@
-export type ProductSource = "seed" | "generated";
+export type ProductSource = "seed" | "generated" | "product-hunt";
 
 export type Product = {
   id: string;
@@ -43,3 +43,14 @@ export type GeneratedProductDraft = Pick<
   | "keywords"
   | "metrics"
 >;
+
+export type ImportedProductProvenance = {
+  provider: "product-hunt";
+  externalIdHash: string;
+  sourceUrlHash: string;
+  sourceWebsiteUrlHash?: string;
+  sourceNameHash: string;
+  sourceContentHash: string;
+  generationModel: string;
+  importedAt: string;
+};

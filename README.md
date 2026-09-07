@@ -21,10 +21,13 @@ The repository starts with exactly 100 hand-curated niche product pages.
 - Dynamic robots.txt, sitemap index, and 45,000-URL sitemap shards
 - Product and FAQ structured data
 - A protected endpoint for indexing the initial catalog in Vectorize
+- A protected, idempotent Product Hunt batch-import endpoint with private provenance
 
 ## Architecture
 
 The application is rendered by one Cloudflare Worker. The initial 100 products are bundled with the Worker, so they load even if D1 is unavailable. New Gemini-created products and email signups are stored in D1. Gemini is the only product generator. Workers AI supplies 384-dimensional embeddings for Vectorize but is not used to write product content. A compact indexed term table provides a no-AI fallback for generated products.
+
+Product Hunt research imports use the same public product shape and search indexes. Magic Catalog stores only cryptographic hashes of the original name, Product Hunt URL, external URL, and external ID in its separate `product_imports` table, along with a content hash and the Gemini model used. The original brand and URLs are never stored in D1, returned by catalog reads, or rendered on product pages.
 
 Product pages are rendered by slug at request time, so adding hundreds of thousands of records does not create a million-file build. The sitemap routes split URLs into crawler-safe batches.
 
@@ -36,7 +39,7 @@ Requirements: Node.js 22.13 or newer.
 npm ci
 ~~~
 
-Create `.dev.vars` from the example. On Windows Command Prompt use `copy .dev.vars.example .dev.vars`; on PowerShell use `Copy-Item .dev.vars.example .dev.vars`; on macOS/Linux use `cp .dev.vars.example .dev.vars`. Then set `GEMINI_API_KEY` and the two random secret values before running:
+Create `.dev.vars` from the example. On Windows Command Prompt use `copy .dev.vars.example .dev.vars`; on PowerShell use `Copy-Item .dev.vars.example .dev.vars`; on macOS/Linux use `cp .dev.vars.example .dev.vars`. Then set `GEMINI_API_KEY` and the three random secret values before running:
 
 ~~~
 npm run db:migrate:local
@@ -79,12 +82,13 @@ npm run db:migrate:remote
 
 The migration is required for generated products, rate limiting, and email signups. Reindexing Vectorize does not create the D1 tables. Future `npm run deploy` commands apply pending migrations automatically before uploading the Worker.
 
-4. Add the Gemini API key and long random values for the two required operational secrets.
+4. Add the Gemini API key and long random values for the three required operational secrets.
 
 ~~~
 npx wrangler secret put GEMINI_API_KEY
 npx wrangler secret put RATE_LIMIT_SALT
 npx wrangler secret put ADMIN_REINDEX_TOKEN
+npx wrangler secret put ADMIN_IMPORT_TOKEN
 ~~~
 
 `GEMINI_MODELS` defaults to `gemini-3.8-flash,gemini-3.7-flash,gemini-3.6-flash,gemini-3.5-flash,gemini-3-flash,gemini-2.5-flash`. They are tried in that order, so an unavailable model, rate limit, or temporary failure falls through to the next Gemini model. Override the comma-separated value in `wrangler.jsonc` only if needed.
@@ -125,6 +129,14 @@ npm run vector:reindex
 ~~~
 
 The endpoint first verifies that the D1 schema is ready, then indexes the 100 bundled products in batches and refreshes up to the 1,000 newest generated products. Newly generated products index themselves automatically.
+
+## Import researched products
+
+The companion [`feet-code/product-hunt-scraper`](https://github.com/feet-code/product-hunt-scraper) repository sends schema-validated batches to `POST /api/admin/import-products`. The route requires `ADMIN_IMPORT_TOKEN`, accepts at most 20 records per request, rejects source-brand leakage, hashes all source identifiers before persistence, writes the product and lexical terms to D1, then upserts the same batch into Vectorize.
+
+The request is idempotent by Product Hunt product slug. Retrying an identical batch does not duplicate records. If D1 succeeds and Vectorize fails, the route returns a retryable 503; the next identical request reuses the stored products and retries their vectors.
+
+After deploying this repository and setting `ADMIN_IMPORT_TOKEN`, copy the same value to `MAGIC_CATALOG_IMPORT_TOKEN` in the scraper's ignored `.env` file. Start with three products there before expanding the run.
 
 ## Diagnose production
 
@@ -217,6 +229,7 @@ Official limits and pricing:
 - Generated schemas are validated before persistence.
 - The signup form includes a honeypot, deduplication, optional Turnstile, and a daily attempt limit.
 - The Vectorize reindex route is hidden behind ADMIN_REINDEX_TOKEN.
+- The bulk product import route is separately hidden behind ADMIN_IMPORT_TOKEN.
 
 ## Main files
 
@@ -224,6 +237,7 @@ Official limits and pricing:
 - app/product/[slug]/page.tsx — SEO product-page renderer
 - app/api/search/route.ts — retrieval and generation flow
 - app/api/signup/route.ts — email capture
+- app/api/admin/import-products/route.ts — authenticated D1 and Vectorize batch import
 - lib/seed-products.ts — the initial 100 products
 - lib/ai.ts — generation, embeddings, and semantic retrieval
 - db/schema.ts — D1 schema

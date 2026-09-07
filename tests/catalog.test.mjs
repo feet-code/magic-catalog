@@ -39,6 +39,87 @@ test("D1 migration contains the query-path indexes and optimization step", async
   assert.match(migration, /idx_products_slug/);
   assert.match(migration, /idx_signups_product_email/);
   assert.match(migration, /PRAGMA optimize/);
+
+  const importMigration = await readFile(
+    path.join(root, "drizzle/0001_productive_riptide.sql"),
+    "utf8",
+  );
+  assert.match(importMigration, /CREATE TABLE `product_imports`/);
+  assert.match(importMigration, /external_id_hash/);
+  assert.match(importMigration, /source_name_hash/);
+  assert.doesNotMatch(importMigration, /`source_name` text/);
+  assert.doesNotMatch(importMigration, /`source_url` text/);
+});
+
+test("Product Hunt imports reject source-brand leakage", async () => {
+  const { findSourceNameLeaks, productImportBatchSchema } =
+    await vite.ssrLoadModule("/lib/import-validation.ts");
+  const product = {
+    name: "Signal Grove",
+    category: "Customer research",
+    audience: "product teams organizing customer interview evidence",
+    problem:
+      "Interview notes become disconnected from decisions, owners, and follow-up work.",
+    promise:
+      "Turn scattered research evidence into a reviewable decision trail.",
+    differentiator:
+      "The workflow keeps evidence, ownership, and follow-up decisions in one structured record.",
+    workflow: [
+      "Import approved research notes and supporting context.",
+      "Group recurring evidence around a specific decision.",
+      "Assign the follow-up action and preserve its outcome.",
+    ],
+    keywords: [
+      "customer interview repository",
+      "research decision log",
+      "product evidence workflow",
+      "user research follow up",
+    ],
+    metrics: ["unassigned follow-up actions", "decision evidence coverage"],
+  };
+  assert.deepEqual(findSourceNameLeaks("Acme Beacon", product), []);
+  assert.deepEqual(
+    findSourceNameLeaks("Acme Beacon", {
+      ...product,
+      differentiator: product.differentiator + " Built around Acme evidence.",
+    }),
+    ["source-token:acme"],
+  );
+
+  const parsed = productImportBatchSchema.parse({
+    products: [
+      {
+        externalId: "example",
+        sourceUrl: "https://www.producthunt.com/products/example",
+        sourceWebsiteUrl: "https://example.com/",
+        sourceName: "Acme Beacon",
+        sourceContentHash: "a".repeat(64),
+        generationModel: "gemini-3.8-flash",
+        product,
+      },
+    ],
+  });
+  assert.equal(parsed.products.length, 1);
+  assert.throws(() =>
+    productImportBatchSchema.parse({
+      products: [
+        {
+          ...parsed.products[0],
+          sourceUrl: "https://example.com/not-product-hunt",
+        },
+      ],
+    }),
+  );
+  assert.throws(() =>
+    productImportBatchSchema.parse({
+      products: [
+        {
+          ...parsed.products[0],
+          generationModel: "gemini-unrequested-flash",
+        },
+      ],
+    }),
+  );
 });
 
 test("rejects invalid SITE_URL values without crashing metadata rendering", async () => {

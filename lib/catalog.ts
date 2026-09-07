@@ -1,7 +1,11 @@
 import { eq, inArray } from "drizzle-orm";
 import { getDb } from "../db";
 import { productTerms, products } from "../db/schema";
-import type { Product, ProductSearchResult } from "./product-types";
+import type {
+  ImportedProductProvenance,
+  Product,
+  ProductSearchResult,
+} from "./product-types";
 import { seedProductBySlug, seedProducts } from "./seed-products";
 import { getRuntimeEnv } from "./runtime";
 
@@ -123,7 +127,12 @@ export function rowToProduct(row: typeof products.$inferSelect): Product {
     workflow: parseStringArray(row.workflowJson, []),
     keywords: parseStringArray(row.keywordsJson, []),
     metrics: parseStringArray(row.metricsJson, []),
-    source: row.source === "seed" ? "seed" : "generated",
+    source:
+      row.source === "seed"
+        ? "seed"
+        : row.source === "product-hunt"
+          ? "product-hunt"
+          : "generated",
     createdAt: row.createdAt,
     originQuery: row.originQuery ?? undefined,
   };
@@ -263,6 +272,95 @@ export async function saveGeneratedProduct(
   if (terms.length) {
     await db.insert(productTerms).values(terms).onConflictDoNothing();
   }
+}
+
+export async function getImportedProductByIdentityHash(
+  provider: ImportedProductProvenance["provider"],
+  externalIdHash: string,
+) {
+  const binding = getRuntimeEnv().DB;
+  if (!binding) throw new Error("The D1 DB binding is unavailable.");
+  const row = await binding
+    .prepare(
+      "SELECT product_slug AS productSlug FROM product_imports " +
+        "WHERE provider = ?1 AND external_id_hash = ?2 LIMIT 1",
+    )
+    .bind(provider, externalIdHash)
+    .first<{ productSlug: string }>();
+  return row?.productSlug ? getProductBySlug(row.productSlug) : null;
+}
+
+export async function saveImportedProduct(
+  product: Product,
+  provenance: ImportedProductProvenance,
+  identityHash: string,
+) {
+  const binding = getRuntimeEnv().DB;
+  if (!binding) throw new Error("The D1 DB binding is unavailable.");
+
+  const statements = [
+    binding
+      .prepare(
+        "INSERT INTO products " +
+          "(id, slug, name, category, audience, problem, promise, differentiator, " +
+          "workflow_json, keywords_json, metrics_json, source, origin_query, query_hash, created_at) " +
+          "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, NULL, ?13, ?14) " +
+          "ON CONFLICT DO NOTHING",
+      )
+      .bind(
+        product.id,
+        product.slug,
+        product.name,
+        product.category,
+        product.audience,
+        product.problem,
+        product.promise,
+        product.differentiator,
+        JSON.stringify(product.workflow),
+        JSON.stringify(product.keywords),
+        JSON.stringify(product.metrics),
+        product.source,
+        identityHash,
+        product.createdAt,
+      ),
+    binding
+      .prepare(
+        "INSERT INTO product_imports " +
+          "(provider, external_id_hash, product_slug, source_url_hash, source_website_url_hash, " +
+          "source_name_hash, source_content_hash, generation_model, imported_at) " +
+          "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9) " +
+          "ON CONFLICT DO NOTHING",
+      )
+      .bind(
+        provenance.provider,
+        provenance.externalIdHash,
+        product.slug,
+        provenance.sourceUrlHash,
+        provenance.sourceWebsiteUrlHash ?? null,
+        provenance.sourceNameHash,
+        provenance.sourceContentHash,
+        provenance.generationModel,
+        provenance.importedAt,
+      ),
+    ...Array.from(weightedTerms(product), ([term, weight]) =>
+      binding
+        .prepare(
+          "INSERT INTO product_terms (product_slug, term, weight) " +
+            "VALUES (?1, ?2, ?3) ON CONFLICT DO NOTHING",
+        )
+        .bind(product.slug, term, weight),
+    ),
+  ];
+
+  await binding.batch(statements);
+  const stored = await getImportedProductByIdentityHash(
+    provenance.provider,
+    provenance.externalIdHash,
+  );
+  if (!stored) {
+    throw new Error("The imported product was not readable after the D1 batch.");
+  }
+  return stored;
 }
 
 export async function dynamicProductCount() {
