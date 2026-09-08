@@ -34,7 +34,7 @@ test("renders the search-first catalog homepage", async () => {
   assert.match(html, /overdue-invoice-rescue/);
 });
 
-test("renders a clear product article that answers likely searches", async () => {
+test("renders a focused product article without repetitive filler", async () => {
   const worker = await loadWorker();
   const response = await worker.fetch(
     new Request("http://localhost/product/overdue-invoice-rescue", {
@@ -47,15 +47,16 @@ test("renders a clear product article that answers likely searches", async () =>
   const visibleHtml = html.replace(/<!--.*?-->/g, "");
   assert.equal(response.status, 200);
   assert.match(visibleHtml, /What is Invoice Rescue\?/);
-  assert.match(visibleHtml, /Invoice Rescue\s+is a Finance operations product built for small agencies and consultancies/);
+  assert.match(visibleHtml, /Invoice Rescue\s+is a Finance operations product for small agencies and consultancies/);
   assert.match(visibleHtml, /What problem does Invoice Rescue solve\?/);
-  assert.match(visibleHtml, /Who is Invoice Rescue for\?/);
   assert.match(visibleHtml, /What can you do with Invoice Rescue\?/);
   assert.match(visibleHtml, /How does Invoice Rescue approach the problem\?/);
-  assert.match(visibleHtml, /At a glance/);
   assert.match(html, /BreadcrumbList/);
   assert.match(html, /application\/ld\+json/);
-  assert.doesNotMatch(visibleHtml, /buying guide|search intent:/i);
+  assert.doesNotMatch(
+    visibleHtml,
+    /what should you pay attention to|surface the smallest set of exceptions or decisions that need attention|who is invoice rescue for\?|at a glance|buying guide|search intent:/i,
+  );
 });
 
 test("publishes robots and the sitemap index", async () => {
